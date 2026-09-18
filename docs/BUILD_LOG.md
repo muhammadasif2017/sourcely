@@ -389,6 +389,7 @@ Before continuing with Task 4, we stepped back and planned what Sourcely becomes
 | [Feature validation](product/FEATURE_VALIDATION.md) | Acceptance criteria, input rules, metrics, and assumptions to test first | Makes "done" testable, and checks the feature is worth building at all. |
 | [Architecture](product/ARCHITECTURE.md) | Current and target system, data model, API surface, key decisions | Lets you reason about the whole system and its tradeoffs in one place. |
 | [Flow diagrams](product/FLOW_DIAGRAMS.md) | Sequence diagrams and state machines for each operation | Shows the order of calls and where each error branches off. |
+| [Data flow diagrams](product/DATA_FLOW.md) | Where data comes from, where it goes, where it's stored, and where it leaves the system | The basis for privacy and security reviews: you can't protect data you haven't traced. |
 
 ### Concepts worth knowing
 

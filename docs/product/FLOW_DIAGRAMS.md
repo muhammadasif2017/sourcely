@@ -1,6 +1,6 @@
 # Flow diagrams: Sourcely
 
-These diagrams show what happens **inside the system** for each operation: which component calls which, in what order, and where errors branch off. The user-facing side of the same operations is in [`INTERACTION_FLOWS.md`](INTERACTION_FLOWS.md). Components are described in [`ARCHITECTURE.md`](ARCHITECTURE.md).
+These diagrams show what happens **inside the system** for each operation: which component calls which, in what order, and where errors branch off. The user-facing side of the same operations is in [`INTERACTION_FLOWS.md`](INTERACTION_FLOWS.md), and the data each operation moves and stores is in [`DATA_FLOW.md`](DATA_FLOW.md). Components are described in [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
 Each diagram is labelled **Built**, **Specced** or **Proposed**. Specced diagrams follow `SPEC.md` exactly. Where a Proposed step extends a Specced flow, the step is marked in the diagram.
 

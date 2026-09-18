@@ -14,6 +14,7 @@ These documents describe Sourcely as a **product**, not only as the proof-of-con
 | 4 | [`FEATURE_VALIDATION.md`](FEATURE_VALIDATION.md) | How each feature is accepted: acceptance criteria, input rules, metrics, and the assumptions to test before building. |
 | 5 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | The current system and the target system: containers, components, data model, API surface, key decisions. |
 | 6 | [`FLOW_DIAGRAMS.md`](FLOW_DIAGRAMS.md) | What happens inside the system for each operation: sequence diagrams and state machines. |
+| 7 | [`DATA_FLOW.md`](DATA_FLOW.md) | What data moves where: data flow diagrams (Levels 0 to 2), trust boundaries, the data inventory and deletion flows. |
 
 ## Status labels used everywhere
 
