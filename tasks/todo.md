@@ -114,3 +114,75 @@ Every task also meets the Definition of Done:
 
 ### Checkpoint D
 - [x] Complete. Reviewed and approved by the owner on 2026-09-19.
+
+## Phase 5: Product Phase 1, accounts, workspaces and API keys
+
+Source of truth: `SPEC.md`, section "Phase 1". Every task keeps the Definition of Done above. From Task 12 on, tests need Postgres running (`docker compose up -d db`).
+
+- [ ] **Task 12: Postgres foundation** (M)
+  - Acceptance:
+    - `docker-compose.yml` gains a `db` service (`pgvector/pgvector:pg17`, health check, named volume) and `docker/postgres/init.sql`, which creates the `sourcely_owner` and `sourcely_app` roles.
+    - Settings `DATABASE_URL`, `MIGRATION_DATABASE_URL` and `EMBEDDING_DIM` (checked against the model at startup). New dependencies: SQLAlchemy 2, psycopg 3 (binary), Alembic, pgvector, argon2-cffi, email-validator.
+    - Alembic is set up; migration `0001` enables the `vector` and `citext` extensions. A request-scoped database session is available through `DbDep`.
+    - Test fixtures create a fresh database per run, migrate it as the owner, ensure the app role exists, and truncate tables between tests. CI runs a Postgres service container.
+    - `GET /health` reports `database` and returns 503 when the database is down.
+  - Verify: `uv run alembic upgrade head` on the Compose database; health and fixture tests; CI green.
+  - Files: `docker-compose.yml`, `docker/postgres/init.sql`, `alembic.ini`, `migrations/`, `app/db/`, `app/core/config.py`, `app/api/deps.py`, `app/api/routes/health.py`, `tests/conftest.py`, `.github/workflows/ci.yml`, `pyproject.toml`
+
+- [ ] **Task 13: Accounts and sessions** (M)
+  - Acceptance:
+    - Tables `users`, `sessions`, `email_tokens`, `login_attempts`.
+    - `POST /auth/signup`, `/auth/verify`, `/auth/login`, `/auth/logout`, `/auth/password-reset`, `/auth/password-reset/confirm` and `GET /me` behave as in the spec, including identical responses for known and unknown emails.
+    - Argon2id hashes; hashed session and email tokens; `HttpOnly`/`SameSite=Lax`/`Secure` session cookie; the CSRF double-submit check on session writes; 429 after 5 failures in 15 minutes; a password reset deletes every session.
+    - `ConsoleEmailSender` logs recipient, subject and token; tests capture emails with a fake sender.
+  - Verify: unit tests for hashing, tokens and the throttle window; API tests for every row in the spec's auth table.
+  - Files: `app/core/security.py`, `app/services/accounts.py`, `app/services/email.py`, `app/api/routes/auth.py`, `app/schemas/auth.py`, `migrations/versions/0002_*`, `tests/`
+
+- [ ] **Task 14: Workspaces, roles and the Principal** (M)
+  - Acceptance:
+    - Tables `workspaces` and `memberships`. `POST /workspaces`, `PATCH` and `DELETE /workspaces/{id}` (name confirmation), and `POST /workspaces/{id}/transfer`.
+    - `app/api/auth.py` resolves a session plus `X-Workspace-ID` into a `Principal`; `PrincipalDep` and a role check are available to routes. 400 without the header, 404 for a non-member, 403 for a role that's too low.
+    - Exactly one owner per workspace; the permission matrix is a table-driven unit test.
+  - Verify: unit and API tests.
+  - Files: `app/api/auth.py`, `app/services/workspaces.py`, `app/api/routes/workspaces.py`, `app/schemas/workspaces.py`, `migrations/versions/0003_*`, `tests/`
+
+- [ ] **Task 15: API keys** (S)
+  - Acceptance:
+    - Table `api_keys`; create (key shown once), list and revoke under `/workspaces/{id}/api-keys`, admin only.
+    - Bearer keys resolve to a `Principal` with the editor role; a revoked key gets 401 at once; keys get 403 on management endpoints; a cookie plus a key gets 400; `last_used_at` is updated at most once a minute.
+  - Verify: unit tests for key generation and hashing; API tests.
+  - Files: `app/services/api_keys.py`, `app/api/routes/api_keys.py`, `app/api/auth.py`, `migrations/versions/0004_*`, `tests/`
+
+- [ ] **Task 16: Tenant data on pgvector** (L)
+  - Acceptance:
+    - Tables `documents` and `chunks` (`vector(384)`, HNSW cosine index) with row-level security; the API sets `app.workspace_id` per request.
+    - `PgVectorStore` implements the store interface with `workspace_id`; filters use `ANY` and JSONB containment; filtered searches still return up to `top_k`; replace is one transaction.
+    - Every PoC route requires a `Principal` and applies the role table; the paths and bodies don't change.
+    - The `client` fixture authenticates with an API key, so the PoC tests run unchanged against Postgres; the fake embedder returns 384 dimensions.
+    - Cross-tenant tests generated from `app.routes`, and a database-level test as `sourcely_app` with another workspace set.
+    - Parity gate: `scripts/calibrate.py` on `PgVectorStore` gives the same outcome as Chroma, or `MIN_RELEVANCE` is recalibrated and `SPEC.md` updated. Then `chromadb` is removed.
+  - Verify: the full suite; the parity run; the cross-tenant and database-level tests.
+  - Files: `app/services/vector_store.py`, `app/api/routes/*`, `app/main.py`, `migrations/versions/0005_*`, `scripts/calibrate.py`, `tests/`
+
+### Checkpoint E (human review)
+- [ ] Two workspaces can't see each other's data, proven at the HTTP and database levels.
+- [ ] The parity gate passed, or the new threshold is recorded.
+
+- [ ] **Task 17: Members and invites** (S)
+  - Acceptance:
+    - List, change and remove members; admins only assign roles below their own; the owner can't be removed or demoted.
+    - Create (1 to 20 emails), list and revoke invites; `POST /invites/accept` with 410 for missing, used or expired, and 409 for a different email; removing a member makes their next request 404.
+  - Verify: API tests.
+  - Files: `app/services/workspaces.py`, `app/api/routes/members.py`, `app/api/routes/invites.py`, `migrations/versions/0006_*`, `tests/`
+
+- [ ] **Task 18: Compose, docs and live verification** (S)
+  - Acceptance:
+    - `docker compose up --build` starts `db`, runs the one-shot `migrate` service, then a healthy `api`; data survives a restart.
+    - README, `CLAUDE.md`, `.env.example`, `BUILD_LOG.md`, `TECH_STACK.md` and `INTERVIEW_PREP.md` cover accounts, workspaces, keys and Postgres. The product docs mark Phase 1 as built.
+    - A live curl run: sign up, verify from the log, create a workspace, ingest and ask with the session; create a key and ask with it.
+    - Every Phase 1 success criterion in `SPEC.md` has evidence.
+  - Verify: follow the README from an empty database.
+  - Files: `docker-compose.yml`, `Dockerfile`, `README.md`, docs
+
+### Checkpoint F
+- [ ] Phase 1 complete. Ready for review.

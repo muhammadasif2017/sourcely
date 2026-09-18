@@ -80,3 +80,42 @@ The work is sequential. It's one agent on one codebase, and each slice extends t
 ## Open questions
 
 - None blocking. `MIN_RELEVANCE` is resolved with data at Checkpoint B.
+
+## Phase 5: Product Phase 1 (accounts, workspaces, API keys)
+
+Approved 2026-09-19 with decisions D1 (own auth), D2 (PostgreSQL) and D3 (pgvector). The contract is in `SPEC.md`, section "Phase 1"; tasks are in `todo.md`.
+
+### Architecture decisions
+
+- **Order: data foundation, then identity, then tenancy, then vectors.** Postgres and migrations (12), accounts (13), workspaces and the `Principal` (14) and API keys (15) come before the vector store moves (16). API keys come before Task 16 so the test client can authenticate with one header, which keeps the 233 PoC tests unchanged.
+- **Two database roles.** Migrations run as the owner; the app connects as a role that owns nothing, so row-level security can't be bypassed by accident.
+- **Row-level security on tenant content only** (`documents`, `chunks`). Tables used to resolve identity are protected in code, because they're read before the workspace is known.
+- **Sync SQLAlchemy.** Matches the existing `def` routes and threadpool model; no async rewrite.
+- **Generated cross-tenant tests.** One test walks the route table, so new routes can't skip isolation checks.
+
+### Tasks
+
+- [ ] Task 12: Postgres foundation
+- [ ] Task 13: Accounts and sessions
+- [ ] Task 14: Workspaces, roles and the Principal
+- [ ] Task 15: API keys
+- [ ] Task 16: Tenant data on pgvector
+
+### Checkpoint E: isolation (human review)
+- [ ] Isolation proven at the HTTP and database levels; parity gate passed.
+
+- [ ] Task 17: Members and invites
+- [ ] Task 18: Compose, docs and live verification
+
+### Checkpoint F: Phase 1 complete
+- [ ] Every Phase 1 success criterion in `SPEC.md` has evidence.
+
+### Risks
+
+| Risk | Impact | Mitigation |
+|---|---|---|
+| Tests now need Postgres, so the suite is slower and fails without Docker | Medium | One database per run with truncation between tests; a clear error when the database isn't reachable; CI service container |
+| pgvector scores differ from Chroma and `MIN_RELEVANCE` stops fitting | Medium | Parity gate with `scripts/calibrate.py` before Chroma is removed |
+| Row-level security silently bypassed because the app connects as the table owner | High | Two roles from the first migration, and a database-level test that would fail if RLS were bypassed |
+| An endpoint forgets workspace scoping | High | `workspace_id` required in every tenant function, RLS underneath, and generated cross-tenant tests |
+| Auth mistakes: timing leaks, CSRF gaps, token reuse | High | Spec rules turned into tests: identical responses, dummy hash, CSRF on every session write, single-use hashed tokens |

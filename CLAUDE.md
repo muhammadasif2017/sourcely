@@ -2,7 +2,7 @@
 
 Operational guidance for working in this repository: commands, conventions, boundaries and verified gotchas. The *why* lives elsewhere:
 
-- `SPEC.md`: the source of truth for the API contract, configuration and success criteria. Read only the section relevant to the task.
+- `SPEC.md`: the source of truth for the API contract, configuration and success criteria. Read only the section relevant to the task. The PoC is tagged `v0.1.0`; the "Phase 1" section at the end (accounts, workspaces, API keys, Postgres with pgvector) overrides earlier sections where they differ.
 - `tasks/plan.md` and `tasks/todo.md`: architecture decisions and task status. Check `todo.md` to see what's next.
 - `docs/TECH_STACK.md`: why each technology was chosen.
 - `docs/BUILD_LOG.md` and `docs/INTERVIEW_PREP.md`: learning docs for the owner, who is new to FastAPI.
