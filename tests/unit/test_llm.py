@@ -239,3 +239,160 @@ def test_create_llm_anthropic():
 @pytest.mark.parametrize("key", [None, "", "   "])
 def test_create_llm_without_key_returns_none(key):
     assert create_llm(_settings(openai_api_key=key)) is None
+
+
+# --- streaming ------------------------------------------------------------------------------
+
+
+def _chunk(content=None, finish_reason=None, empty=False):
+    if empty:
+        return SimpleNamespace(choices=[])
+    delta = SimpleNamespace(content=content)
+    return SimpleNamespace(choices=[SimpleNamespace(delta=delta, finish_reason=finish_reason)])
+
+
+def _chunks_then(chunks, error=None):
+    """An SDK stream: yields chunks, then optionally raises mid-iteration."""
+    yield from chunks
+    if error:
+        raise error
+
+
+def test_openai_stream_request_shape_and_deltas():
+    chunks = [_chunk(empty=True), _chunk("Hel"), _chunk(None), _chunk(""), _chunk("lo [1].")]
+    recorder = Recorder(_chunks_then(chunks + [_chunk(finish_reason="stop")]))
+    llm = OpenAICompatibleLLM(model="gemini-x", max_tokens=50, client=_openai_client(recorder))
+    assert list(llm.stream("SYS", "USER")) == ["Hel", "lo [1]."]
+    assert recorder.kwargs == {
+        "model": "gemini-x",
+        "max_completion_tokens": 50,
+        "messages": [
+            {"role": "system", "content": "SYS"},
+            {"role": "user", "content": "USER"},
+        ],
+        "stream": True,
+    }
+
+
+def test_openai_stream_error_when_opening_is_mapped():
+    error = _openai_status_error(429)
+    llm = OpenAICompatibleLLM(
+        model="m", max_tokens=10, client=_openai_client(Recorder(error=error))
+    )
+    with pytest.raises(LLMError) as err:
+        next(llm.stream("s", "u"))
+    assert err.value.status_code == 503
+
+
+def test_openai_stream_error_mid_iteration_is_mapped():
+    request = httpx.Request("POST", "https://llm.test")
+    recorder = Recorder(_chunks_then([_chunk("Part")], openai.APIConnectionError(request=request)))
+    llm = OpenAICompatibleLLM(model="m", max_tokens=10, client=_openai_client(recorder))
+    stream = llm.stream("s", "u")
+    assert next(stream) == "Part"
+    with pytest.raises(LLMError) as err:
+        next(stream)
+    assert err.value.status_code == 504
+
+
+def test_openai_stream_content_filter_is_502():
+    recorder = Recorder(_chunks_then([_chunk("Part"), _chunk(finish_reason="content_filter")]))
+    llm = OpenAICompatibleLLM(model="m", max_tokens=10, client=_openai_client(recorder))
+    stream = llm.stream("s", "u")
+    assert next(stream) == "Part"
+    with pytest.raises(LLMError) as err:
+        next(stream)
+    assert err.value.status_code == 502
+
+
+def test_openai_stream_with_no_text_is_502():
+    recorder = Recorder(_chunks_then([_chunk(None), _chunk(finish_reason="stop")]))
+    llm = OpenAICompatibleLLM(model="m", max_tokens=10, client=_openai_client(recorder))
+    with pytest.raises(LLMError) as err:
+        list(llm.stream("s", "u"))
+    assert err.value.status_code == 502
+
+
+class FakeAnthropicStream:
+    """Stands in for the SDK's MessageStream context manager."""
+
+    def __init__(self, texts, stop_reason="end_turn", error=None):
+        self._texts = texts
+        self._stop_reason = stop_reason
+        self._error = error
+        self.closed = False
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.closed = True
+        return False
+
+    @property
+    def text_stream(self):
+        yield from self._texts
+        if self._error:
+            raise self._error
+
+    def get_final_message(self):
+        return SimpleNamespace(stop_reason=self._stop_reason)
+
+
+def _anthropic_stream_client(recorder: Recorder):
+    return SimpleNamespace(beta=SimpleNamespace(messages=SimpleNamespace(stream=recorder)))
+
+
+def test_anthropic_stream_request_shape_and_text():
+    fake = FakeAnthropicStream(["Part ", "", "[1]."])
+    recorder = Recorder(fake)
+    llm = AnthropicLLM(
+        model="claude-opus-5", max_tokens=900, client=_anthropic_stream_client(recorder)
+    )
+    assert list(llm.stream("SYS", "USER")) == ["Part ", "[1]."]
+    assert fake.closed
+    assert recorder.kwargs == {
+        "model": "claude-opus-5",
+        "max_tokens": 900,
+        "system": "SYS",
+        "messages": [{"role": "user", "content": "USER"}],
+        "betas": ["server-side-fallback-2026-07-01"],
+        "fallbacks": "default",
+    }
+
+
+def test_anthropic_stream_refusal_after_partial_is_502():
+    recorder = Recorder(FakeAnthropicStream(["Partial"], stop_reason="refusal"))
+    llm = AnthropicLLM(model="m", max_tokens=10, client=_anthropic_stream_client(recorder))
+    stream = llm.stream("s", "u")
+    assert next(stream) == "Partial"
+    with pytest.raises(LLMError) as err:
+        next(stream)
+    assert err.value.status_code == 502
+
+
+def test_anthropic_stream_refusal_before_output_is_502():
+    recorder = Recorder(FakeAnthropicStream([], stop_reason="refusal"))
+    llm = AnthropicLLM(model="m", max_tokens=10, client=_anthropic_stream_client(recorder))
+    with pytest.raises(LLMError) as err:
+        next(llm.stream("s", "u"))
+    assert err.value.status_code == 502
+
+
+def test_anthropic_stream_error_when_opening_is_mapped():
+    recorder = Recorder(error=_anthropic_status_error(529))
+    llm = AnthropicLLM(model="m", max_tokens=10, client=_anthropic_stream_client(recorder))
+    with pytest.raises(LLMError) as err:
+        next(llm.stream("s", "u"))
+    assert err.value.status_code == 503
+
+
+def test_anthropic_stream_error_mid_iteration_is_mapped():
+    request = httpx2.Request("POST", "https://llm.test")
+    fake = FakeAnthropicStream(["Part"], error=anthropic.APITimeoutError(request=request))
+    llm = AnthropicLLM(model="m", max_tokens=10, client=_anthropic_stream_client(Recorder(fake)))
+    stream = llm.stream("s", "u")
+    assert next(stream) == "Part"
+    with pytest.raises(LLMError) as err:
+        next(stream)
+    assert err.value.status_code == 504

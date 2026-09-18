@@ -49,10 +49,10 @@ config ──┬── chunking
 - [x] Task 6: `POST /documents/upload`
 - [x] Task 7: `GET /documents` and `DELETE /documents/{id}`
 - [x] Task 8: Metadata and document filters on `/search` and `/ask`
-- [ ] Task 9: `POST /ask/stream` (SSE)
+- [x] Task 9: `POST /ask/stream` (SSE)
 
 ### Checkpoint C: extras
-- [ ] All tests pass. A live `curl -N` stream on Gemini shows tokens arriving progressively. Delete removes the document from list and search.
+- [x] All tests pass. A live `curl -N` stream on Gemini shows tokens arriving progressively. Delete removes the document from list and search.
 
 ### Phase 4: Ship
 - [ ] Task 10: Docker

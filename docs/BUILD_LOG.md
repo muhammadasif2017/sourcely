@@ -27,8 +27,9 @@ The log is updated at the end of every task.
 12. [Step 11 (Task 6): File upload, `POST /documents/upload`](#step-11-task-6-file-upload-post-documentsupload)
 13. [Step 12 (Task 7): Listing and deleting documents](#step-12-task-7-listing-and-deleting-documents)
 14. [Step 13 (Task 8): Filters on `/search` and `/ask`](#step-13-task-8-filters-on-search-and-ask)
-15. [How to run everything built so far](#how-to-run-everything-built-so-far)
-16. [Glossary](#glossary)
+15. [Step 14 (Task 9): Streaming answers, `POST /ask/stream`](#step-14-task-9-streaming-answers-post-askstream)
+16. [How to run everything built so far](#how-to-run-everything-built-so-far)
+17. [Glossary](#glossary)
 
 ---
 
@@ -702,6 +703,73 @@ The same `where` goes through `/ask`: `retrieve_relevant` passes it to the store
 
 - `tests/unit/test_vector_store.py` (15 tests): `build_where` for every shape, then filtered queries against a real in-memory Chroma collection. Its vectors are nearly identical on purpose, so similarity can't decide the result and only the filter does. It covers `str`, `int`, `bool` and `float` values, AND between metadata pairs, AND between ids and metadata, and filters that match nothing.
 - `tests/integration/test_filters.py` (33 tests): filtered `/search` and `/ask` over HTTP, `null` and `{}` filters, an `/ask` filter that excludes every relevant document (fixed answer, no LLM call), 12 invalid filter shapes on both endpoints, and the inclusive limits (100 ids, 10 pairs).
+
+---
+
+## Step 14 (Task 9): Streaming answers, `POST /ask/stream`
+
+The answer now arrives as it's written instead of all at once. This is the most delicate endpoint, because once a streamed response starts, its HTTP status can't change.
+
+### 14.1 Server-Sent Events
+
+SSE is a simple text format on top of a normal HTTP response with `Content-Type: text/event-stream`. Each event is a few `field: value` lines followed by a blank line:
+
+```
+event: sources
+data: {"sources": [...], "provider": "openai", "model": "gemini-3.5-flash-lite"}
+
+event: token
+data: {"text": "Part-time staff receive annual leave"}
+
+event: done
+data: {}
+```
+
+`data` is JSON, so a newline inside the answer text becomes `\n` and can't end the event early.
+
+### 14.2 The key design: fetch the first token before sending headers
+
+A normal response sends its status and headers at the end, when everything is known. A streamed response sends them **at the start**. After that, a failure can't become a 503 any more: the client has already received `200 OK`.
+
+Most failures happen at the very start: a missing or wrong key, a rate limit, a timeout, a refusal. So `start_answer_stream` in `app/services/rag.py` does all the risky work *before* the route builds the response:
+
+1. Retrieve the sources (a relevance miss gives the fixed answer, with no LLM call).
+2. Open the provider stream and call `next()` once to get the **first token**.
+3. Return the sources plus `chain([first], rest)`, an iterator that replays that first token and continues with the rest.
+
+If step 2 raises `LLMError`, the route turns it into a normal 502, 503 or 504 with a JSON body. Only failures *after* the first token become an `event: error` inside the 200 stream.
+
+### 14.3 Adapter streaming (`app/services/llm.py`)
+
+Each adapter gained `stream(system, user) -> Iterator[str]`, a generator that yields non-empty text deltas.
+
+- **OpenAI-compatible**: `chat.completions.create(..., stream=True)`. It skips chunks with no `choices` (some servers send usage or keep-alive chunks) and `None` or empty deltas. The plan listed this as a risk for Gemini's compatibility layer, and the guards are in place.
+- **Anthropic**: `with client.beta.messages.stream(...) as stream: for text in stream.text_stream`. After the text ends, `get_final_message().stop_reason` is checked. With server-side fallbacks, a model that declines mid-answer is replaced *on the same stream* and the text simply continues. So only a final `refusal`, meaning the whole fallback chain declined, becomes an error.
+- Both raise `LLMError(502)` if the stream ends without any text.
+
+**One error-mapping function per SDK.** The SDK-to-`LLMError` translation became a context manager (`_openai_errors`, `_anthropic_errors`) built with `@contextmanager`. `complete()` and `stream()` both wrap their SDK calls in it, so a timeout means 504 in both, without duplicated `except` blocks. It also catches the SDKs' base `APIError`, which is what a provider's error event *inside* a stream raises. That kind of error has no HTTP status of its own, so it maps to 502.
+
+### 14.4 The route (`app/api/routes/ask.py`)
+
+The route returns `StreamingResponse(_sse_events(stream), media_type="text/event-stream")` with two extra headers:
+
+- `Cache-Control: no-cache`, so nothing caches a live answer.
+- `X-Accel-Buffering: no`, which tells nginx-style proxies not to buffer the response. A buffering proxy would collect every token and deliver them all at the end, defeating the point.
+
+`_sse_events` is a plain (sync) generator. Starlette runs it in its threadpool, the same way it runs our `def` routes, so blocking SDK iteration never blocks the event loop.
+
+**Mid-stream errors.** `LLMError` becomes `event: error` with its safe detail. Any other exception is logged with its full trace and becomes `event: error` with the fixed text "The answer was interrupted". The generic 500 handler can't help there, because the status line has already been sent. A test checks that an internal message ("socket details that must not leak") never reaches the client.
+
+The raw ASGI middleware from Task 1 passes the stream through unbuffered. The access log records the full duration when the stream ends: `POST /ask/stream 200 4594.0ms`.
+
+### 14.5 Tests
+
+- `tests/unit/test_llm.py` (+10): the exact streaming request for each SDK (`stream=True`; `betas` and `fallbacks`), skipping empty chunks and deltas, errors when the stream opens and in the middle of it, content filter, a refusal before and after partial text, an empty stream, and the Anthropic stream context manager being closed.
+- `tests/integration/test_ask_stream.py` (16): event order, tokens joining to the full answer, the `sources` payload, headers, the no-context path with no LLM call, filters, 502/503/504 before the first token as real HTTP errors with JSON, an `LLMError` and an unexpected exception after the first token as `error` events, a missing key (503), and validation (422). A small parser in the test splits the body into `(event, data)` pairs.
+
+### 14.6 Live check
+
+A real `uvicorn` server with Gemini, read with `curl -N`. The `sources` event came first, then 5 `token` events over about 2 seconds, then `done`. Gemini sends phrase-sized pieces ("Part-", then "time staff receive annual leave that is pro-rated based on their contracted hours", ...) rather than single words. The answer cited `[1]` throughout.
 
 ---
 

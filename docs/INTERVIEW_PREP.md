@@ -187,6 +187,18 @@ Answer in your own words. The goal is to understand *why*, not to memorise. Ques
 
 > Claude Opus 5 can decline a request through its safety classifiers (`stop_reason: "refusal"`). With `fallbacks="default"` and the `server-side-fallback-2026-07-01` beta, Anthropic re-runs a declined request on a recommended fallback model server-side. We still check `stop_reason` and return 502 if it's a refusal anyway. Because another model may have served the answer, the response reports `response.model` rather than the configured name.
 
+**Q: How does `/ask/stream` return proper HTTP errors if streaming has already started?** (Task 9)
+
+> It doesn't start until it's safe. Once a streamed response begins, the status is fixed at 200. So the service retrieves the sources, opens the provider stream and pulls the **first token** before the route builds the response. Missing keys, auth errors, rate limits, timeouts and refusals all happen at that point and still return 502, 503 or 504 with a JSON body. The first token is put back in front with `itertools.chain`. Only failures after it become an `event: error` inside the stream.
+
+**Q: Why Server-Sent Events rather than WebSockets?**
+
+> The data only flows one way, from server to client, and SSE is just an HTTP response with a text format: it works through proxies and with `curl -N`, and needs no extra library. One caveat I'd mention: the browser's `EventSource` only does `GET`, and this endpoint is a `POST` with a JSON body, so a browser reads it with `fetch` and a `ReadableStream`.
+
+**Q: What can go wrong between your server and the client when streaming?**
+
+> Buffering. A reverse proxy such as nginx collects the response by default, so the client would get every token at the end. The response sets `X-Accel-Buffering: no` and `Cache-Control: no-cache`. Inside the app, the request-id middleware is raw ASGI rather than `BaseHTTPMiddleware`, so it doesn't buffer the body either.
+
 **Q: How do you escape retrieved text in the prompt, and why?**
 
 > Each chunk goes into a `<source id="n" title="…">` block, and both the title and the text are HTML-escaped. Otherwise a document containing `</source>` plus fake instructions could close its own block and pose as a new source or as instructions. Escaping makes the delimiters trustworthy. It's one layer of the prompt-injection defence, together with the system prompt rule to treat sources as data.

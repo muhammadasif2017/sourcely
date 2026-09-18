@@ -129,6 +129,14 @@ event: done      data: {}
 
 Anthropic streams through `client.beta.messages.stream(...)` with the same fallback settings as `/ask`. The OpenAI-compatible provider streams through `chat.completions.create(stream=True)`.
 
+Settled in Task 9:
+- `model` in the `sources` event is the configured model. It is sent before generation, so with Claude's fallbacks a different model may produce some of the text; `/ask` reports the served model instead.
+- A `token` event carries whatever text the provider sent in one delta: a word, a phrase or a sentence. Empty deltas are skipped.
+- An unexpected failure after the first token sends `event: error` with the fixed detail `The answer was interrupted`; the trace goes to the log only.
+- Claude's server-side fallback continues a mid-answer decline on the same stream. Only a final `stop_reason` of `refusal`, meaning the whole fallback chain declined, becomes an `error` event.
+- The response sets `Cache-Control: no-cache` and `X-Accel-Buffering: no`, so proxies pass tokens through instead of buffering them.
+- A browser can't use `EventSource` here, because it only sends `GET`. Clients read the `POST` response body as a stream (`fetch` with a `ReadableStream`, or `curl -N`).
+
 ### `GET /health`
 
 Returns `{ "status": "ok", "chunks_indexed": N, "embedding_model": "…", "llm_provider": "…", "llm_model": "…", "llm_configured": true }`.

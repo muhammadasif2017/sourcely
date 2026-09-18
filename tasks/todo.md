@@ -85,7 +85,7 @@ Every task also meets the Definition of Done:
   - Verify: `tests/unit/test_vector_store.py` covers `build_where` and filtered search. An API test checks filtered `/ask` sources.
   - Files: `app/schemas/search.py`, `app/services/{vector_store,rag}.py`, `app/api/routes/{search,ask}.py`, `tests/unit/test_vector_store.py`, `tests/integration/test_search.py`
 
-- [ ] **Task 9: `POST /ask/stream` (SSE)** (M)
+- [x] **Task 9: `POST /ask/stream` (SSE)** (M)
   - Acceptance:
     - Events arrive in the order `sources`, then one or more `token` events, then `done`. The no-context path sends the fixed answer and makes no LLM call.
     - An error before the first token returns the mapped HTTP status. An error after the first token sends an `error` event and closes the stream.
@@ -94,7 +94,7 @@ Every task also meets the Definition of Done:
   - Files: `app/services/{llm,rag}.py`, `app/api/routes/ask.py`, `tests/unit/test_llm.py`, `tests/integration/test_ask.py`
 
 ### Checkpoint C
-- [ ] All tests pass. The live stream works on Gemini. Delete is reflected in both list and search.
+- [x] All tests pass. The live stream works on Gemini. Delete is reflected in both list and search.
 
 ## Phase 4: Ship
 

@@ -422,7 +422,11 @@ It has already caught a real issue: a function declared to return `list[float]` 
 
 **Problem it solves.** LLM answers take seconds. Streaming tokens as they're generated makes the service feel responsive, which is the "typing" effect in chat UIs.
 
-**Why chosen over WebSockets.** The data flows only one way (server to client). SSE works over plain HTTP, through proxies, with `curl -N` and browsers' built-in `EventSource`, and needs no extra library: FastAPI's `StreamingResponse` is enough. WebSockets are for two-way, long-lived conversations, which is more complexity than needed.
+**Why chosen over WebSockets.** The data flows only one way (server to client). SSE works over plain HTTP, through proxies and with `curl -N`, and needs no extra library: FastAPI's `StreamingResponse` is enough. WebSockets are for two-way, long-lived conversations, which is more complexity than needed.
+
+**Where used.** `POST /ask/stream` in `app/api/routes/ask.py` (Task 9), fed by `start_answer_stream` in `app/services/rag.py` and each adapter's `stream()` in `app/services/llm.py`.
+
+**Limitation.** Browsers' built-in `EventSource` only sends `GET`, and `/ask/stream` is a `POST` with a JSON body. A browser client reads the response with `fetch` and a `ReadableStream` instead. The product plan's web app does exactly that.
 
 ---
 

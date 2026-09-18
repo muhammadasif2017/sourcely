@@ -13,7 +13,7 @@ Each diagram is labelled **Built**, **Specced** or **Proposed**. Specced diagram
 | [FD-5](#fd-5-ingestion-worker-and-job-states) | Ingestion worker and job states | Proposed |
 | [FD-6](#fd-6-semantic-search) | Semantic search, `POST /search` | **Built** |
 | [FD-7](#fd-7-ask) | Ask, `POST /ask` | **Built** |
-| [FD-8](#fd-8-streamed-ask-with-follow-up-rewriting) | Streamed ask with follow-up rewriting | Specced, rewriting Proposed |
+| [FD-8](#fd-8-streamed-ask-with-follow-up-rewriting) | Streamed ask with follow-up rewriting | Built (stream), rewriting Proposed |
 | [FD-9](#fd-9-sign-up-verify-and-sign-in) | Sign up, verify and sign in | Proposed |
 | [FD-10](#fd-10-api-key-authentication) | API key authentication | Proposed |
 | [FD-11](#fd-11-delete-a-document) | Delete a document | Built (PoC), cascade Proposed |
@@ -293,7 +293,7 @@ The adapter turns every SDK exception into one `LLMError(status_code, detail)`, 
 
 ## FD-8. Streamed ask with follow-up rewriting
 
-`POST /ask/stream`. The stream protocol is **Specced** (Task 9). The conversation steps (load history, rewrite, save messages) are **Proposed** for Phase 3 and marked `(P)`.
+`POST /ask/stream`. The stream protocol is **Built** (Task 9). The conversation steps (load history, rewrite, save messages) are **Proposed** for Phase 3 and marked `(P)`.
 
 ```mermaid
 sequenceDiagram

@@ -2,6 +2,7 @@ import hashlib
 import math
 import re
 import uuid
+from collections.abc import Iterator
 
 import chromadb
 import pytest
@@ -55,6 +56,20 @@ class FakeLLM:
         if self.error:
             raise self.error
         return LLMAnswer(text=self.answer, model=self.model)
+
+    # Streaming: `error` fires before the first token; `mid_stream_error` after
+    # `tokens_before_error` tokens.
+    mid_stream_error: Exception | None = None
+    tokens_before_error: int = 2
+
+    def stream(self, system: str, user: str) -> Iterator[str]:
+        self.calls.append((system, user))
+        if self.error:
+            raise self.error
+        for i, token in enumerate(self.answer.split(" ")):
+            if self.mid_stream_error and i == self.tokens_before_error:
+                raise self.mid_stream_error
+            yield token if i == 0 else " " + token
 
 
 @pytest.fixture

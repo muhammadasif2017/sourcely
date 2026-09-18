@@ -1,9 +1,11 @@
 """Retrieval-augmented answering: retrieve relevant chunks, then ask the LLM about them."""
 
+from collections.abc import Iterator
 from dataclasses import dataclass
+from itertools import chain
 
 from app.services.embeddings import Embedder
-from app.services.llm import LLM, SYSTEM_PROMPT, build_user_prompt
+from app.services.llm import LLM, NO_ANSWER, SYSTEM_PROMPT, LLMError, build_user_prompt
 from app.services.vector_store import ChunkHit, VectorStore, Where
 
 NO_CONTEXT_ANSWER = (
@@ -53,3 +55,39 @@ def answer_question(
         return RagAnswer(NO_CONTEXT_ANSWER, [], llm.provider, llm.model)
     result = llm.complete(SYSTEM_PROMPT, build_user_prompt(question, sources))
     return RagAnswer(result.text, sources, llm.provider, result.model)
+
+
+@dataclass(frozen=True)
+class RagStream:
+    """A streamed answer: its sources and generator are known before any byte is sent."""
+
+    sources: list[ChunkHit]
+    provider: str
+    model: str
+    tokens: Iterator[str]
+
+
+def start_answer_stream(
+    question: str,
+    top_k: int,
+    min_relevance: float,
+    embedder: Embedder,
+    store: VectorStore,
+    llm: LLM,
+    where: Where | None = None,
+) -> RagStream:
+    """Retrieve context and start streaming the answer.
+
+    The first token is fetched here, before the caller sends any response headers. A missing
+    key, a rejected request, a rate limit or a timeout therefore raises `LLMError` now and can
+    still become a normal HTTP error. Only failures after the first token happen mid-stream.
+    """
+    sources = retrieve_relevant(question, top_k, min_relevance, embedder, store, where)
+    if not sources:
+        return RagStream([], llm.provider, llm.model, iter([NO_CONTEXT_ANSWER]))
+    tokens = llm.stream(SYSTEM_PROMPT, build_user_prompt(question, sources))
+    try:
+        first = next(tokens)
+    except StopIteration as exc:
+        raise LLMError(502, NO_ANSWER) from exc
+    return RagStream(sources, llm.provider, llm.model, chain([first], tokens))
