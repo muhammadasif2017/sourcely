@@ -60,6 +60,7 @@ Every task also meets the Definition of Done:
 - [ ] An off-topic question gets the "no information" answer with no LLM call.
 - [ ] Data survives a server restart.
 - [ ] `MIN_RELEVANCE` is calibrated from measured scores and recorded in `SPEC.md`.
+- [ ] Measure whether prefixing queries with bge's instruction ("Represent this sentence for searching relevant passages: ") separates relevant from irrelevant scores better. We verified that `query_embed` adds no prefix. Adopt the prefix only if it measurably helps.
 
 ## Phase 3: Extras
 

@@ -81,9 +81,11 @@ Answer in your own words. The goal is to understand *why*, not to memorise. Ques
 
 > It's the cosine of the angle between two vectors, which measures direction and ignores length. Text embedding models are trained so that direction carries the meaning, and bge produces normalised vectors, so cosine is the standard metric. Chroma returns cosine *distance* (1 minus similarity), and we convert it back to a similarity score where higher means more relevant.
 
-**Q: What does bge's `query_embed` do differently from `embed`?** (Task 3/4)
+**Q: Do queries and documents get embedded the same way?**
 
-> bge models were trained with an instruction prefix for queries ("Represent this sentence for searching relevant passages:"). fastembed's `query_embed` adds it, and `embed` doesn't, since it's for passages. Using the right one for each side improves retrieval.
+> It depends on the model. Some models (E5, and older bge versions) expect a prefix on queries, such as bge's "Represent this sentence for searching relevant passages:". For bge-small-en-v1.5, BAAI made that instruction optional. We use fastembed's `query_embed()` for queries, and we verified that for this model it produces exactly the same vector as `embed()`: it adds no prefix. Whether adding the instruction manually improves our retrieval is something to *measure* on real data, not assume. That's done at the calibration checkpoint.
+>
+> A good follow-up point for interviews: "I initially assumed `query_embed` added the prefix, tested it, and found it didn't. So I check library behaviour empirically rather than trusting documentation or memory."
 
 **Q: How does a vector database find nearest neighbours quickly?**
 

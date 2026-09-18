@@ -223,7 +223,7 @@ Related docs: [`BUILD_LOG.md`](BUILD_LOG.md) (how it was built) and [`INTERVIEW_
 **Why chosen.**
 - **Free and offline.** No key and no per-request cost. Ingest and search keep working even if the LLM provider is down or out of quota.
 - **No PyTorch.** `sentence-transformers` pulls in PyTorch (hundreds of MB to GBs). fastembed uses ONNX Runtime, so the install and the Docker image stay much smaller, and CPU inference is fast.
-- **Correct query handling.** `query_embed()` applies the model's query instruction for bge models, which improves retrieval.
+- **Separate query and passage entry points** (`query_embed()` and `embed()`). Models that need a query prefix get it without changing our code. For bge-small-en-v1.5, we verified that both return the same vector, meaning no prefix is added. Whether adding bge's optional instruction helps is measured at Checkpoint B.
 - **Decoupled from the LLM choice.** Switching between Gemini, OpenAI and Claude never forces re-embedding stored documents.
 - It's the same library `helpdesk-copilot` already uses.
 

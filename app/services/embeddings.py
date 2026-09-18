@@ -32,6 +32,10 @@ class FastEmbedEmbedder:
         return [vec.tolist() for vec in self._model.embed(texts)]
 
     def embed_query(self, text: str) -> list[float]:
-        """Embed a query. bge models expect a query instruction, which `query_embed` adds."""
+        """Embed a search query.
+
+        `query_embed` is fastembed's query-side entry point. For bge-small-en-v1.5 it returns the
+        same vector as `embed` (verified); it does not add bge's optional query instruction.
+        """
         vector: list[float] = next(iter(self._model.query_embed(text))).tolist()
         return vector
