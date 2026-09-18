@@ -32,10 +32,10 @@ config ──┬── chunking
 
 ### Phase 1: Foundation
 - [x] Task 1: Skeleton, configuration, `/health` and standard tooling (layered layout, request ids, mypy, pre-commit, CI)
-- [ ] Task 2: Chunking
+- [x] Task 2: Chunking
 
 ### Checkpoint A: foundation
-- [ ] `pytest` and `ruff` are clean, and the server boots to show `/health` and `/docs`
+- [x] `pytest` and `ruff` are clean, and the server boots to show `/health` and `/docs`
 
 ### Phase 2: Core RAG flow (vertical slices)
 - [ ] Task 3: Ingest slice, `POST /documents`

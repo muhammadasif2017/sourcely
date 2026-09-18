@@ -18,7 +18,7 @@ Every task also meets the Definition of Done:
   - Verify: unit and integration tests. Then `uv run uvicorn app.main:create_app --factory` boots with the real model, and `/health` and `/docs` both return 200.
   - Files: `app/main.py`, `app/core/*`, `app/api/{deps,middleware}.py`, `app/api/routes/health.py`, `app/schemas/health.py`, `tests/conftest.py`, `tests/unit/test_config.py`, `tests/integration/test_{health,middleware}.py`, `.env.example`, `.gitignore`, `pyproject.toml`, `.pre-commit-config.yaml`, `.github/workflows/ci.yml`
 
-- [ ] **Task 2: Chunking** (S)
+- [x] **Task 2: Chunking** (S)
   - Acceptance:
     - `chunk_text(text, size, overlap)` returns chunks of at most `size` characters, split on paragraph, then line, then sentence, then word boundaries, with a hard cut as the last resort.
     - Adjacent chunks share trailing context of up to `overlap` characters.
@@ -27,7 +27,7 @@ Every task also meets the Definition of Done:
   - Files: `app/services/chunking.py`, `tests/unit/test_chunking.py`
 
 ### Checkpoint A
-- [ ] Tests and lint are clean. The server boots.
+- [x] Tests and lint are clean. The server boots.
 
 ## Phase 2: Core RAG flow
 
