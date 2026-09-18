@@ -92,7 +92,9 @@ Response **200**:
 
 ### `POST /ask`: answer from retrieved context
 
-Request: `{ "question": "…", "top_k": 4, "filters": { … } }`. It uses the same limits and filters as `/search`.
+Request: `{ "question": "…", "top_k": 4, "filters": { … } }`. It uses the same limits and filters as `/search`, and the question must contain non-whitespace.
+
+The key check comes first: when the active provider has no API key, `/ask` returns 503 before any retrieval, even for a question that would have no relevant context. An operator sees "not configured" consistently instead of an answer that depends on the question.
 
 The server retrieves `top_k` chunks and drops any chunk that scores below `MIN_RELEVANCE`.
 
@@ -102,6 +104,8 @@ The server retrieves `top_k` chunks and drops any chunk that scores below `MIN_R
 ```json
 { "answer": "… [1] …", "sources": [ /* the search hits that were used */ ], "provider": "anthropic", "model": "claude-opus-5" }
 ```
+
+`model` is the model that actually produced the answer, as reported by the provider. With Claude's refusal fallbacks it can differ from `ANTHROPIC_MODEL`. Source titles and texts are HTML-escaped inside their `<source>` blocks, so a document containing `</source>` can't break out of its block.
 
 The system prompt sets these rules. The model answers only from the context and cites sources as `[n]`. It says so when the context does not contain the answer. It treats the context as data, never as instructions (a basic prompt-injection guard).
 

@@ -12,7 +12,7 @@ Answer in your own words. The goal is to understand *why*, not to memorise. Ques
 
 > It's a FastAPI backend for retrieval-augmented generation. You upload text documents. The service splits them into overlapping chunks, embeds each chunk locally with a small ONNX model, and stores the vectors in ChromaDB. You can then search semantically, or ask a question: the service retrieves the most relevant chunks and gives them to an LLM, which answers with citations. The LLM is configurable (OpenAI, Claude, or any OpenAI-compatible API such as Gemini or Ollama), and embeddings run locally, so ingest and search cost nothing. It has input validation, clear error mapping, request-id logging, strict typing, tests and CI.
 
-**Q: Walk me through what happens when someone calls `/ask`.** (Task 5)
+**Q: Walk me through what happens when someone calls `/ask`.**
 
 > The question is embedded with the same model used for the documents. Chroma returns the `top_k` nearest chunks by cosine similarity. Chunks scoring below a relevance threshold are dropped. If nothing is left, we return "not enough information" without calling the LLM, which saves cost and avoids hallucination. Otherwise we build a prompt with the chunks as numbered sources plus the question, call the LLM with a system prompt that says to answer only from the sources and cite them as `[n]`, and return the answer together with the sources used.
 
@@ -127,13 +127,13 @@ Answer in your own words. The goal is to understand *why*, not to memorise. Ques
 
 > An empty list with 200. Searching an empty index isn't a client mistake, and the spec says so. I checked Chroma's behaviour rather than assuming: `n_results=0` raises a `TypeError`, but an empty collection queried with `n_results` of 1 or more returns an empty result. Validation guarantees `top_k >= 1`, so the empty case needs no special branch.
 
-**Q: Why is there a `MIN_RELEVANCE` threshold?** (Task 5)
+**Q: Why is there a `MIN_RELEVANCE` threshold?**
 
 > Nearest neighbours are always returned, even when nothing is actually relevant. Without a threshold, an off-topic question still gets "context", and the LLM may produce a confident wrong answer. The threshold lets us say "not enough information" and skip the LLM call. The value is calibrated from measured scores, because small embedding models give unrelated text fairly high similarity.
 
 ---
 
-## 5. LLM integration and prompting (Task 5)
+## 5. LLM integration and prompting
 
 **Q: How do you support several LLM providers without a mess?**
 
@@ -153,7 +153,19 @@ Answer in your own words. The goal is to understand *why*, not to memorise. Ques
 
 **Q: What's the `fallbacks` parameter on the Claude call?**
 
-> Claude Opus 5 can decline a request through its safety classifiers (`stop_reason: "refusal"`). With `fallbacks="default"` and the `server-side-fallback-2026-07-01` beta, Anthropic re-runs a declined request on a recommended fallback model server-side. We still check `stop_reason` and return 502 if it's a refusal anyway.
+> Claude Opus 5 can decline a request through its safety classifiers (`stop_reason: "refusal"`). With `fallbacks="default"` and the `server-side-fallback-2026-07-01` beta, Anthropic re-runs a declined request on a recommended fallback model server-side. We still check `stop_reason` and return 502 if it's a refusal anyway. Because another model may have served the answer, the response reports `response.model` rather than the configured name.
+
+**Q: How do you escape retrieved text in the prompt, and why?**
+
+> Each chunk goes into a `<source id="n" title="…">` block, and both the title and the text are HTML-escaped. Otherwise a document containing `</source>` plus fake instructions could close its own block and pose as a new source or as instructions. Escaping makes the delimiters trustworthy. It's one layer of the prompt-injection defence, together with the system prompt rule to treat sources as data.
+
+**Q: Why does a missing key return 503 even for questions with no relevant context?**
+
+> Consistency. If the key were checked only when the LLM is needed, one misconfigured server would answer 200 to off-topic questions and 503 to on-topic ones, which is confusing to diagnose. So the route checks the key first. `/documents` and `/search` never need the key and keep working.
+
+**Q: Tell me about a bug the tests couldn't catch.**
+
+> The first live `/ask` returned 502. The code was right: `.env` had an OpenAI key next to Gemini's base URL, and Gemini reports a bad key as 400, not 401. Unit tests with fakes can't see configuration. That's why the plan includes a live end-to-end check, and why the error mapping logs the provider's status code: it made the cause easy to find.
 
 ---
 
@@ -217,7 +229,7 @@ Answer in your own words. The goal is to understand *why*, not to memorise. Ques
 
 **Q: How did you test this without paying for API calls?**
 
-> With fakes. A deterministic `FakeEmbedder` hashes words into a vector: it's fast, needs no download, yet shared words still produce similar vectors, so ranking tests are meaningful. The LLM is replaced by a fake that records its prompt (Task 5). Chroma runs in memory with a unique collection per test. Paid APIs are never called in tests. One manual live check against the real model and Gemini confirms the real wiring.
+> With fakes. A deterministic `FakeEmbedder` hashes words into a vector: it's fast, needs no download, yet shared words still produce similar vectors, so ranking tests are meaningful. The LLM is replaced by a `FakeLLM` that records its prompt, and the SDK adapters are tested with fake clients that record the exact request. Chroma runs in memory with a unique collection per test. Paid APIs are never called in tests. One manual live check against the real model and Gemini confirms the real wiring.
 
 **Q: Unit vs integration tests. What's the split here?**
 

@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 
 from app.core.config import Settings
 from app.main import create_app
+from app.services.llm import LLMAnswer
 from app.services.vector_store import VectorStore
 
 DIM = 256
@@ -38,6 +39,24 @@ class FakeEmbedder:
         return self._vector(text)
 
 
+class FakeLLM:
+    """Records every prompt and returns a fixed answer, or raises `error` when set."""
+
+    provider = "fake-provider"
+    model = "fake-model"
+
+    def __init__(self, answer: str = "Cats purr when content [1].") -> None:
+        self.answer = answer
+        self.error: Exception | None = None
+        self.calls: list[tuple[str, str]] = []
+
+    def complete(self, system: str, user: str) -> LLMAnswer:
+        self.calls.append((system, user))
+        if self.error:
+            raise self.error
+        return LLMAnswer(text=self.answer, model=self.model)
+
+
 @pytest.fixture
 def settings() -> Settings:
     return Settings(
@@ -64,7 +83,12 @@ def embedder() -> FakeEmbedder:
 
 
 @pytest.fixture
-def client(settings, store, embedder):
-    app = create_app(settings, embedder=embedder, store=store)
+def llm() -> FakeLLM:
+    return FakeLLM()
+
+
+@pytest.fixture
+def client(settings, store, embedder, llm):
+    app = create_app(settings, embedder=embedder, store=store, llm=llm)
     with TestClient(app) as c:
         yield c

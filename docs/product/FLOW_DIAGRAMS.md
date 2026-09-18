@@ -12,7 +12,7 @@ Each diagram is labelled **Built**, **Specced** or **Proposed**. Specced diagram
 | [FD-4](#fd-4-upload-a-file-with-background-processing) | Upload a file with background processing | Proposed |
 | [FD-5](#fd-5-ingestion-worker-and-job-states) | Ingestion worker and job states | Proposed |
 | [FD-6](#fd-6-semantic-search) | Semantic search, `POST /search` | Specced |
-| [FD-7](#fd-7-ask) | Ask, `POST /ask` | Specced |
+| [FD-7](#fd-7-ask) | Ask, `POST /ask` | **Built** |
 | [FD-8](#fd-8-streamed-ask-with-follow-up-rewriting) | Streamed ask with follow-up rewriting | Specced, rewriting Proposed |
 | [FD-9](#fd-9-sign-up-verify-and-sign-in) | Sign up, verify and sign in | Proposed |
 | [FD-10](#fd-10-api-key-authentication) | API key authentication | Proposed |
@@ -244,7 +244,7 @@ sequenceDiagram
 
 ## FD-7. Ask
 
-`POST /ask`. **Specced** (Task 5).
+`POST /ask`. **Built** (Task 5).
 
 ```mermaid
 sequenceDiagram
@@ -259,7 +259,10 @@ sequenceDiagram
 
     C->>R: POST /ask {question, top_k?, filters?}
     R->>R: Validate, else 422
-    R->>RAG: answer(question, top_k, filters)
+    alt LLM key missing
+        R-->>C: 503 LLM provider not configured
+    end
+    R->>RAG: answer_question(question, top_k, min_relevance)
     RAG->>E: embed_query(question)
     RAG->>V: query(vector, top_k, filters)
     V-->>RAG: hits with scores
@@ -268,9 +271,6 @@ sequenceDiagram
         RAG-->>R: Fixed "not enough information" answer, sources []
         R-->>C: 200, no LLM call made
     else Hits left
-        alt LLM key missing
-            RAG-->>C: 503 LLM provider not configured
-        end
         RAG->>RAG: Build prompt: system rules, numbered source blocks, question
         RAG->>L: complete(system, user)
         L->>P: OpenAI-compatible chat.completions, or Anthropic beta.messages.create with fallbacks

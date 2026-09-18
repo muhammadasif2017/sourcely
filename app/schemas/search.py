@@ -3,6 +3,7 @@
 from pydantic import BaseModel, Field, field_validator
 
 from app.schemas.documents import MetadataValue
+from app.services.vector_store import ChunkHit
 
 MAX_QUERY_CHARS = 2000
 MAX_TOP_K = 20
@@ -31,6 +32,18 @@ class SearchHit(BaseModel):
     text: str
     score: float
     metadata: dict[str, MetadataValue]
+
+    @classmethod
+    def from_chunk(cls, hit: ChunkHit) -> "SearchHit":
+        """Build the response shape from a vector-store hit."""
+        return cls(
+            document_id=hit.document_id,
+            chunk_index=hit.chunk_index,
+            title=hit.title,
+            text=hit.text,
+            score=hit.score,
+            metadata=hit.metadata,
+        )
 
 
 class SearchResponse(BaseModel):

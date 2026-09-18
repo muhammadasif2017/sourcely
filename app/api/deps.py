@@ -6,6 +6,7 @@ from fastapi import Depends, Request
 
 from app.core.config import Settings
 from app.services.embeddings import Embedder
+from app.services.llm import LLM
 from app.services.vector_store import VectorStore
 
 
@@ -27,6 +28,13 @@ def get_store(request: Request) -> VectorStore:
     return store
 
 
+def get_llm(request: Request) -> LLM | None:
+    """The configured LLM, or None when its API key is missing (routes answer 503)."""
+    llm: LLM | None = request.app.state.llm
+    return llm
+
+
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 EmbedderDep = Annotated[Embedder, Depends(get_embedder)]
 StoreDep = Annotated[VectorStore, Depends(get_store)]
+LLMDep = Annotated[LLM | None, Depends(get_llm)]

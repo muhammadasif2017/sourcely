@@ -47,7 +47,7 @@ Every task also meets the Definition of Done:
   - Verify: API tests.
   - Files: `app/schemas/search.py`, `app/services/vector_store.py`, `app/api/routes/search.py`, `app/main.py`, `tests/integration/test_search.py`
 
-- [ ] **Task 5: Ask slice, `POST /ask`** (M)
+- [x] **Task 5: Ask slice, `POST /ask`** (M)
   - Acceptance:
     - The prompt holds numbered `<source>` blocks and the question. The system prompt enforces answering from context only, `[n]` citations, an explicit "I don't know" and treating context as data.
     - When no hit scores at or above `MIN_RELEVANCE`, the endpoint returns the fixed answer with `sources: []` and the LLM is not called.

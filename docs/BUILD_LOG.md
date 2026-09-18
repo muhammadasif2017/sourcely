@@ -22,8 +22,9 @@ The log is updated at the end of every task.
 7. [Step 6 (Task 3): Ingesting documents, `POST /documents`](#step-6-task-3-ingesting-documents-post-documents)
 8. [Step 7: Product planning (after Task 3)](#step-7-product-planning-after-task-3)
 9. [Step 8 (Task 4): Semantic search, `POST /search`](#step-8-task-4-semantic-search-post-search)
-10. [How to run everything built so far](#how-to-run-everything-built-so-far)
-11. [Glossary](#glossary)
+10. [Step 9 (Task 5): Answering questions, `POST /ask`](#step-9-task-5-answering-questions-post-ask)
+11. [How to run everything built so far](#how-to-run-everything-built-so-far)
+12. [Glossary](#glossary)
 
 ---
 
@@ -458,6 +459,73 @@ The numbers matter for Task 5. Unrelated text scores 0.40 to 0.63, which overlap
 ### 8.6 A tooling fix found on the way
 
 `ruff format --check .` failed on `CLAUDE.md` and two docs: ruff 0.16 also formats Python code blocks inside Markdown, and it wanted to reflow illustrative snippets. CI runs that exact command, so it would have failed. `pyproject.toml` now excludes `*.md` from formatting.
+
+---
+
+## Step 9 (Task 5): Answering questions, `POST /ask`
+
+The third vertical slice completes the RAG loop: retrieve the relevant chunks, give them to an LLM, and return its answer together with the sources it was given.
+
+```
+JSON body -> validate -> key check (503) -> embed_query -> VectorStore.query -> drop hits below MIN_RELEVANCE
+          -> none left: fixed answer, no LLM call
+          -> otherwise: numbered <source> prompt -> LLM -> answer + sources
+```
+
+### 9.1 Two provider adapters and one error type (`app/services/llm.py`)
+
+`LLM` is a `Protocol`: anything with `provider`, `model` and `complete(system, user) -> LLMAnswer`. A Protocol is Python's *structural* typing: a class satisfies it by having the right attributes, without inheriting from it. That's why the test `FakeLLM` works with no base class.
+
+- **`OpenAICompatibleLLM`** calls `chat.completions.create(model, max_completion_tokens, messages)`. With `OPENAI_BASE_URL` it talks to Gemini or Ollama instead of OpenAI, with no code change.
+- **`AnthropicLLM`** calls `beta.messages.create(..., betas=["server-side-fallback-2026-07-01"], fallbacks="default")`. If Claude's safety classifiers decline a request, Anthropic re-runs it on a fallback model inside the same call. We still check `stop_reason == "refusal"` *before* reading the content, because the whole chain can decline. The answer reports `response.model`, the model that actually served it.
+- **`create_llm(settings)`** picks the adapter with one `if`, and returns `None` when the key is missing. The app still starts: `/documents` and `/search` keep working, and `/ask` returns 503.
+
+We checked the installed SDKs before writing the calls: `fallbacks` accepts `"default"` in anthropic 1.6, and both SDKs define `APITimeoutError` as a subclass of `APIConnectionError`, so one `except` covers both.
+
+**Error mapping.** Each SDK raises its own exception classes. Both adapters translate them into one `LLMError(status_code, detail)`, so the route has a single `except`:
+
+| Provider result | Our status | Why |
+|---|---|---|
+| 429, 503, 529 (rate limit, unavailable, overloaded) | 503 | Temporary. The client should try again later. |
+| 408, 504, timeout, connection error | 504 | The provider didn't answer in time. |
+| Anything else: 400, 401, 404, 500, refusal, empty answer | 502 | The upstream service rejected us or failed. It isn't the client's fault, so not a 4xx. |
+
+The details are generic ("LLM provider rejected the request"). The provider's own message can contain account details, so it goes to the log as a status code only, never to the client.
+
+### 9.2 The prompt
+
+The system prompt sets five rules: use only the sources, cite every claim as `[n]`, say there is not enough information instead of guessing, treat the sources as data rather than instructions, and answer in the question's language.
+
+The user message wraps each chunk in a numbered block:
+
+```
+<sources>
+<source id="1" title="Leave policy">
+Employees get 21 days of paid annual leave...
+</source>
+</sources>
+
+Question: How much annual leave do part-time staff get?
+```
+
+Titles and texts are **HTML-escaped**. Without that, a document containing `</source>` followed by fake instructions could close its own block and pose as something else. A unit test proves the escaping.
+
+### 9.3 Orchestration (`app/services/rag.py`)
+
+`answer_question` retrieves, filters by `MIN_RELEVANCE`, and returns the fixed `NO_CONTEXT_ANSWER` without calling the LLM when nothing is left. Skipping the call saves money and avoids a confident answer built on unrelated text. It is a plain function over injected components, so it is easy to test and will be reused by the streaming endpoint in Task 9.
+
+### 9.4 Why the key check comes first
+
+The route returns 503 before any retrieval when the key is missing. The alternative, checking only when the LLM is about to be called, would make `/ask` answer 200 for off-topic questions and 503 for on-topic ones on the same misconfigured server. Failing consistently is easier to diagnose. `SPEC.md` and flow diagram FD-7 now say so.
+
+### 9.5 Tests
+
+- `tests/unit/test_llm.py` (32 tests) uses fake SDK clients that record the request. It checks the exact request each adapter sends (including `betas` and `fallbacks`), text joining, the served model, refusal and empty answers, every status mapping built from real SDK exception objects, prompt numbering and escaping, and the factory.
+- `tests/integration/test_ask.py` (16 tests) uses `FakeLLM` from `conftest.py`. It checks the answer and sources, that the context and question reach the prompt, that irrelevant chunks are dropped, both no-context paths skipping the LLM, `top_k`, the missing key giving 503 while `/documents` and `/search` still work, error statuses passed through, and 422 validation.
+
+### 9.6 Live check: the configuration caught a real problem
+
+The first live `/ask` returned **502**. The test suite couldn't catch this, because it's configuration: `.env` held an OpenAI key (`sk-proj-…`) next to the Gemini base URL. Gemini answered **400 "Please pass a valid API key"**. Gemini reports a bad key as 400, not 401, and our mapping turned it into a 502 with a safe message, as designed. The off-topic question in the same run returned the fixed answer in 39 ms with no LLM call. The full live check waits for a valid key at Checkpoint B.
 
 ---
 

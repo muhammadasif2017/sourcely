@@ -12,11 +12,12 @@ import chromadb
 from fastapi import FastAPI
 
 from app.api.middleware import RequestContextMiddleware
-from app.api.routes import documents, health, search
+from app.api.routes import ask, documents, health, search
 from app.core.config import Settings, get_settings
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
 from app.services.embeddings import Embedder, FastEmbedEmbedder
+from app.services.llm import LLM, create_llm
 from app.services.vector_store import VectorStore
 
 logger = logging.getLogger(__name__)
@@ -27,6 +28,7 @@ def create_app(
     *,
     embedder: Embedder | None = None,
     store: VectorStore | None = None,
+    llm: LLM | None = None,
 ) -> FastAPI:
     """Build the app. Components not passed in are created from settings at startup."""
     settings = settings or get_settings()
@@ -41,6 +43,8 @@ def create_app(
         app.state.store = store or VectorStore(
             chromadb.PersistentClient(path=settings.chroma_path), settings.collection_name
         )
+        # None when the provider's key is missing: /ask answers 503, the rest keeps working.
+        app.state.llm = llm if llm is not None else create_llm(settings)
         logger.info(
             "ready: embedding_model=%s llm=%s/%s configured=%s",
             settings.embedding_model,
@@ -61,4 +65,5 @@ def create_app(
     app.include_router(health.router)
     app.include_router(documents.router)
     app.include_router(search.router)
+    app.include_router(ask.router)
     return app
