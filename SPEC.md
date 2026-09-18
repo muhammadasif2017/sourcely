@@ -51,7 +51,7 @@ Request:
 
 - `text`: required. Must contain non-whitespace. At most `MAX_DOCUMENT_CHARS` characters (default 200,000). A longer text returns **413**.
 - `document_id`: optional, `^[A-Za-z0-9._-]{1,128}$`. When absent, the server generates a UUID. When the id already exists, the server **replaces** that document's chunks, so re-ingesting a document is idempotent.
-- `title`: optional, at most 200 characters.
+- `title`: optional, at most 200 characters. When absent, it is stored and returned as `""`, because Chroma metadata cannot hold `null`.
 - `metadata`: optional flat map with at most 20 keys. Keys match `^[A-Za-z][A-Za-z0-9_]{0,63}$`. The server reserves `document_id`, `chunk_index` and `title`, and rejects them with 422. Values are str, int, float or bool, because Chroma stores only scalar values.
 
 Response **201**:

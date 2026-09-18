@@ -19,8 +19,9 @@ The log is updated at the end of every task.
 4. [Step 3: Write the spec and the plan](#step-3-write-the-spec-and-the-plan)
 5. [Step 4 (Task 1): Skeleton, settings, health check and tooling](#step-4-task-1-skeleton-settings-health-check-and-tooling)
 6. [Step 5 (Task 2): Chunking](#step-5-task-2-chunking)
-7. [How to run everything built so far](#how-to-run-everything-built-so-far)
-8. [Glossary](#glossary)
+7. [Step 6 (Task 3): Ingesting documents, `POST /documents`](#step-6-task-3-ingesting-documents-post-documents)
+8. [How to run everything built so far](#how-to-run-everything-built-so-far)
+9. [Glossary](#glossary)
 
 ---
 
@@ -327,6 +328,46 @@ Defaults are `CHUNK_SIZE=800` and `CHUNK_OVERLAP=120` characters: a few paragrap
 3. **Refactor:** tidied, with the tests as a safety net.
 
 The tests pin down the behaviour: short text gives one chunk, blank text gives none, every chunk fits the size, no words are lost and order is kept, adjacent chunks overlap, paragraph boundaries are preferred, unbroken text is hard-cut, and invalid parameters raise `ValueError`.
+
+---
+
+## Step 6 (Task 3): Ingesting documents, `POST /documents`
+
+This is the first *vertical slice*: one endpoint that goes all the way from HTTP request to stored vectors. The flow is:
+
+```
+JSON body -> validate (Pydantic) -> size check (413) -> chunk_text -> embed_documents -> replace_document -> 201
+```
+
+### 6.1 Request validation (`app/schemas/documents.py`)
+
+`DocumentCreate` declares the body. Every rule that FastAPI can check on its own lives here, so a bad request never reaches our code and gets a **422** automatically:
+
+- `text` must contain non-whitespace. A `field_validator` checks `text.strip()`.
+- `document_id` must match `^[A-Za-z0-9._-]{1,128}$` (`Field(pattern=...)`). When absent, the route generates a UUID.
+- `title` is at most 200 characters. When absent it's stored as `""`, because Chroma metadata can't hold `None`.
+- `metadata` is `dict[str, str | int | float | bool]`. Pydantic rejects lists, nested objects and `null` because they match none of the union members. A second validator enforces at most 20 keys, the key pattern, and the reserved names `document_id`, `chunk_index` and `title`, which the server writes itself.
+
+Pydantic's "smart" union mode keeps `true` as a `bool` rather than converting it to `1`, so types survive the round trip into Chroma.
+
+### 6.2 Why the size limit is a 413, not a 422
+
+The spec says a too-long document returns **413 Content Too Large**. A `max_length` on the field would produce a 422, and the schema can't see `Settings` anyway. So the route checks `len(body.text) > settings.max_document_chars` and raises `AppError(413, ...)`. The same `len(body.text)` is returned as `characters`, so the check and the response can never disagree.
+
+### 6.3 Storing and replacing (`app/services/vector_store.py`)
+
+`VectorStore.replace_document(document_id, chunks, embeddings, metadata, title)`:
+
+1. Deletes every existing chunk whose metadata has this `document_id` (`collection.delete(where={"document_id": ...})`).
+2. Adds the new chunks with ids `{document_id}:0`, `{document_id}:1`, ... Each chunk's metadata is the client's metadata plus `document_id`, `chunk_index` and `title`.
+
+Deleting by metadata, not by computed ids, is what makes re-ingest safe. If the old version had 10 chunks and the new one has 3, computing ids from the *new* count would only overwrite `:0` to `:2` and leave `:3` to `:9` behind as orphans that still show up in search.
+
+The route embeds *before* calling the store. If embedding fails, the old version of the document is still intact.
+
+### 6.4 Tests (`tests/integration/test_documents.py`)
+
+Written first (red), then the code (green). They cover the 201 body, the stored ids and metadata, the generated id, re-ingest with a shorter version (asserting the old last chunk id is gone, not just that the count dropped), other documents being untouched, the 413 limit and the exact boundary, and a parametrized list of 19 invalid payloads that must each return 422 and store nothing. The 422 tests assert only the status code, because the body of FastAPI's validation error is an implementation detail.
 
 ---
 

@@ -32,7 +32,7 @@ Every task also meets the Definition of Done:
 
 ## Phase 2: Core RAG flow
 
-- [ ] **Task 3: Ingest slice, `POST /documents`** (M)
+- [x] **Task 3: Ingest slice, `POST /documents`** (M)
   - Acceptance:
     - Returns 201 with `{document_id, title, chunks, characters}`. Chunks are stored with ids `{document_id}:{i}` and metadata that includes `document_id`, `chunk_index` and `title`.
     - Returns 422 for blank text, a bad id, a reserved or badly named metadata key, a non-scalar value, or more than 20 keys. Returns 413 above `MAX_DOCUMENT_CHARS`.

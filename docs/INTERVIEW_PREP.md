@@ -95,6 +95,22 @@ Answer in your own words. The goal is to understand *why*, not to memorise. Ques
 
 > For a PoC, embedded Chroma is ideal: it runs in-process, persists to disk, needs no server and no key. For production at scale, with many writers and replicas, I'd consider Chroma in server mode, Qdrant, pgvector (if Postgres is already used) or a managed service. The `VectorStore` class wraps Chroma behind a small interface, so swapping it touches one module.
 
+**Q: How does ingestion work, end to end?** (Task 3)
+
+> `POST /documents` validates the body with Pydantic, checks the size limit, splits the text with `chunk_text`, embeds all chunks in one batch, and stores them in Chroma with ids `{document_id}:{i}` and metadata holding `document_id`, `chunk_index`, `title` and the client's own keys. It returns 201 with the id, title, chunk count and character count.
+
+**Q: What happens if a client uploads the same document twice?**
+
+> Re-ingesting an id replaces it, so the operation is idempotent. The store first deletes every chunk whose metadata has that `document_id`, then adds the new ones. Deleting by metadata matters: if I only overwrote ids computed from the new chunk count, a shorter new version would leave the old tail chunks behind as orphans that still appear in search. The route also embeds *before* deleting, so a failed embedding keeps the old version intact. It's not fully atomic, though: Chroma has no transactions, so a crash between delete and add would lose the document. For a PoC that's acceptable; production would version chunks or use a store with transactions.
+
+**Q: Why does a too-large document return 413 and not 422?**
+
+> 413 Content Too Large is the precise HTTP status for "the payload is too big", and the spec asks for it. A Pydantic `max_length` would give 422, and the limit comes from runtime settings the schema can't see, so the route checks it and raises `AppError(413)`.
+
+**Q: Why restrict metadata to flat scalar values?**
+
+> Chroma stores only `str`, `int`, `float` and `bool` metadata values, and those are also what exact-match filters need. Validating at the API edge turns a would-be storage error (a 500) into a clear 422. Keys are restricted to a safe pattern, and `document_id`, `chunk_index` and `title` are reserved because the server writes them itself; letting a client override them would break re-ingest and citations.
+
 **Q: Why is there a `MIN_RELEVANCE` threshold?** (Task 5)
 
 > Nearest neighbours are always returned, even when nothing is actually relevant. Without a threshold, an off-topic question still gets "context", and the LLM may produce a confident wrong answer. The threshold lets us say "not enough information" and skip the LLM call. The value is calibrated from measured scores, because small embedding models give unrelated text fairly high similarity.

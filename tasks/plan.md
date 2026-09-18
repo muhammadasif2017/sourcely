@@ -38,7 +38,7 @@ config ──┬── chunking
 - [x] `pytest` and `ruff` are clean, and the server boots to show `/health` and `/docs`
 
 ### Phase 2: Core RAG flow (vertical slices)
-- [ ] Task 3: Ingest slice, `POST /documents`
+- [x] Task 3: Ingest slice, `POST /documents`
 - [ ] Task 4: Search slice, `POST /search`
 - [ ] Task 5: Ask slice, `POST /ask` with Gemini, OpenAI and Claude providers
 

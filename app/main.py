@@ -12,7 +12,7 @@ import chromadb
 from fastapi import FastAPI
 
 from app.api.middleware import RequestContextMiddleware
-from app.api.routes import health
+from app.api.routes import documents, health
 from app.core.config import Settings, get_settings
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
@@ -59,4 +59,5 @@ def create_app(
     app.add_middleware(RequestContextMiddleware)
     register_exception_handlers(app)
     app.include_router(health.router)
+    app.include_router(documents.router)
     return app
