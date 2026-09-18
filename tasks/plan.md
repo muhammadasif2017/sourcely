@@ -59,7 +59,7 @@ config ──┬── chunking
 - [x] Task 11: README and final verification against the spec's success criteria
 
 ### Checkpoint D: complete
-- [ ] Every success criterion in `SPEC.md` has evidence. Ready for review.
+- [x] Every success criterion in `SPEC.md` has evidence. Approved by the owner on 2026-09-19.
 
 ## Risks and mitigations
 
