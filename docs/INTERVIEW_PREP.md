@@ -99,6 +99,14 @@ Answer in your own words. The goal is to understand *why*, not to memorise. Ques
 
 > `POST /documents` validates the body with Pydantic, checks the size limit, splits the text with `chunk_text`, embeds all chunks in one batch, and stores them in Chroma with ids `{document_id}:{i}` and metadata holding `document_id`, `chunk_index`, `title` and the client's own keys. It returns 201 with the id, title, chunk count and character count.
 
+**Q: How do metadata filters work, and why filter inside the search?** (Task 8)
+
+> Filters are validated by Pydantic, then a pure function, `build_where`, turns them into a Chroma `where` clause: document ids become `$in`, each metadata pair an exact `$eq`, joined with `$and`. Chroma applies it during the nearest-neighbour search, so `top_k=4` still returns up to 4 matching chunks. If I filtered the top 4 afterwards, a strict filter could leave nothing even though matching chunks exist further down.
+
+**Q: Why reject unknown fields in the filters object?**
+
+> Pydantic ignores unknown fields by default. For filters that fails open: a typo like `document_id` instead of `document_ids` would give no error and quietly search every document, which for a knowledge base could mean citing the wrong source. `extra="forbid"` turns that into a 422.
+
 **Q: How do you list documents when the vector store only holds chunks?** (Task 7)
 
 > Every chunk carries `document_id`, `chunk_index`, `title` and the client's metadata. Listing reads only the metadata of all chunks, groups them by `document_id` and counts them. It's O(chunks), which I'd call out as a scaling limit: the real fix is a separate documents table, which the product plan puts in Postgres.

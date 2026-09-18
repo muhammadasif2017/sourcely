@@ -1,12 +1,39 @@
 """Request and response models for semantic search."""
 
-from pydantic import BaseModel, Field, field_validator
+from typing import Annotated
 
-from app.schemas.documents import MetadataValue
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
+
+from app.schemas.documents import DOCUMENT_ID_PATTERN, MetadataValue, check_metadata_keys
 from app.services.vector_store import ChunkHit
 
 MAX_QUERY_CHARS = 2000
 MAX_TOP_K = 20
+MAX_FILTER_DOCUMENT_IDS = 100
+MAX_FILTER_METADATA_PAIRS = 10
+
+DocumentId = Annotated[str, StringConstraints(pattern=DOCUMENT_ID_PATTERN)]
+
+
+class SearchFilters(BaseModel):
+    """Restricts which chunks can match. A chunk must satisfy every field that is given."""
+
+    # A misspelled field would otherwise be ignored silently, and everything would match.
+    model_config = ConfigDict(extra="forbid")
+
+    document_ids: list[DocumentId] | None = Field(
+        None, min_length=1, max_length=MAX_FILTER_DOCUMENT_IDS
+    )
+    metadata: dict[str, MetadataValue] | None = Field(None, min_length=1)
+
+    @field_validator("metadata")
+    @classmethod
+    def _check_metadata(
+        cls, metadata: dict[str, MetadataValue] | None
+    ) -> dict[str, MetadataValue] | None:
+        if metadata is None:
+            return None
+        return check_metadata_keys(metadata, MAX_FILTER_METADATA_PAIRS)
 
 
 class SearchRequest(BaseModel):
@@ -14,6 +41,7 @@ class SearchRequest(BaseModel):
 
     query: str = Field(min_length=1, max_length=MAX_QUERY_CHARS)
     top_k: int | None = Field(None, ge=1, le=MAX_TOP_K)
+    filters: SearchFilters | None = None
 
     @field_validator("query")
     @classmethod

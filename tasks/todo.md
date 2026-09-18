@@ -78,7 +78,7 @@ Every task also meets the Definition of Done:
   - Verify: API tests.
   - Files: `app/services/vector_store.py`, `app/schemas/documents.py`, `app/api/routes/documents.py`, `tests/integration/test_documents.py`
 
-- [ ] **Task 8: Filters on `/search` and `/ask`** (S)
+- [x] **Task 8: Filters on `/search` and `/ask`** (S)
   - Acceptance:
     - `filters.document_ids` (1 to 100 ids) and `filters.metadata` (1 to 10 exact pairs) combine with AND.
     - `build_where` produces the correct `$in`, `$eq` and `$and` clauses. Filtered results contain only matching chunks.

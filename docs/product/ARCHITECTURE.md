@@ -349,8 +349,8 @@ The PoC paths stay exactly as the client's brief fixed them. New endpoints are *
 | `PATCH /documents/{id}` | Edit title and tags | Editor | **Proposed** |
 | `POST /documents/{id}/retry` | Re-queue a failed version | Editor | **Proposed** |
 | `DELETE /documents/{id}` | Delete a document | Editor | **Built** |
-| `POST /search` | Semantic search | Viewer | **Specced** |
-| `POST /ask` | Answer with sources | Viewer | **Specced** (`conversation_id` Proposed) |
+| `POST /search` | Semantic search, with filters | Viewer | **Built** |
+| `POST /ask` | Answer with sources, with filters | Viewer | **Built** (`conversation_id` Proposed) |
 | `POST /ask/stream` | Streamed answer, SSE | Viewer | **Specced** (`conversation_id` and `search_query` in the `sources` event Proposed) |
 | `POST /auth/signup`, `/auth/verify`, `/auth/login`, `/auth/logout`, `/auth/password-reset`, `/auth/password-reset/confirm` | Accounts and sessions | none or session | **Proposed** |
 | `GET /me` | Current user and their workspaces | session | **Proposed** |

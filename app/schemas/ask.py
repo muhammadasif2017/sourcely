@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel, Field, field_validator
 
-from app.schemas.search import MAX_QUERY_CHARS, MAX_TOP_K, SearchHit
+from app.schemas.search import MAX_QUERY_CHARS, MAX_TOP_K, SearchFilters, SearchHit
 
 
 class AskRequest(BaseModel):
@@ -10,6 +10,7 @@ class AskRequest(BaseModel):
 
     question: str = Field(min_length=1, max_length=MAX_QUERY_CHARS)
     top_k: int | None = Field(None, ge=1, le=MAX_TOP_K)
+    filters: SearchFilters | None = None
 
     @field_validator("question")
     @classmethod

@@ -26,8 +26,9 @@ The log is updated at the end of every task.
 11. [Step 10: Checkpoint B, live check and calibration](#step-10-checkpoint-b-live-check-and-calibration)
 12. [Step 11 (Task 6): File upload, `POST /documents/upload`](#step-11-task-6-file-upload-post-documentsupload)
 13. [Step 12 (Task 7): Listing and deleting documents](#step-12-task-7-listing-and-deleting-documents)
-14. [How to run everything built so far](#how-to-run-everything-built-so-far)
-15. [Glossary](#glossary)
+14. [Step 13 (Task 8): Filters on `/search` and `/ask`](#step-13-task-8-filters-on-search-and-ask)
+15. [How to run everything built so far](#how-to-run-everything-built-so-far)
+16. [Glossary](#glossary)
 
 ---
 
@@ -664,6 +665,43 @@ The store returns a frozen dataclass `StoredDocument`, and the route maps it to 
 ### 12.4 Tests (`tests/integration/test_manage_documents.py`)
 
 9 tests, written first and run red: the empty list, sorting with titles, chunk counts and client metadata only, the list after a shorter re-ingest, an uploaded file appearing with its file name as title, delete returning an empty 204 and removing every chunk while other documents stay, the deleted document disappearing from `/search`, 404 for an unknown id and for a second delete, and 422 for invalid ids.
+
+---
+
+## Step 13 (Task 8): Filters on `/search` and `/ask`
+
+Clients can now limit which chunks may match: only certain documents, only certain metadata values, or both.
+
+```json
+{ "query": "refund window", "filters": { "document_ids": ["refunds", "billing-faq"], "metadata": { "source": "wiki" } } }
+```
+
+### 13.1 Validation (`SearchFilters` in `app/schemas/search.py`)
+
+- `document_ids`: 1 to 100 ids, each matching the same id pattern as ingestion. `Annotated[str, StringConstraints(pattern=...)]` applies a rule to *each item* of a list.
+- `metadata`: 1 to 10 pairs with the ingestion key and value rules. The key rules moved into one function, `check_metadata_keys`, used by both ingestion and filters, so the two can't drift apart.
+- `model_config = ConfigDict(extra="forbid")`: an unknown field is a 422. By default Pydantic *ignores* unknown fields. For filters that would be dangerous: a client who wrote `"document_id"` instead of `"document_ids"` would get no error and silently search everything.
+- `filters: null` and `filters: {}` both mean "no filter".
+
+### 13.2 From filters to a Chroma `where` clause (`build_where`)
+
+| Filters | `where` clause |
+|---|---|
+| none | `None` |
+| `document_ids: ["a", "b"]` | `{"document_id": {"$in": ["a", "b"]}}` |
+| `metadata: {"source": "wiki"}` | `{"source": {"$eq": "wiki"}}` |
+| several conditions | `{"$and": [condition, condition, ...]}` |
+
+`build_where` is a **pure function**: plain data in, plain data out, no Chroma call. That makes it trivial to unit-test, which is why the plan kept it separate. One Chroma detail it handles: `$and` must have at least two items, so a single condition is returned unwrapped.
+
+Filtering happens **inside** the nearest-neighbour search, not after it. Chroma only considers chunks that match `where`, so asking for `top_k=4` still returns up to 4 matching chunks. Filtering the top 4 afterwards could return fewer, or none.
+
+The same `where` goes through `/ask`: `retrieve_relevant` passes it to the store, so an answer can only cite allowed documents. If the filter leaves nothing relevant, `/ask` returns the fixed answer without calling the LLM.
+
+### 13.3 Tests
+
+- `tests/unit/test_vector_store.py` (15 tests): `build_where` for every shape, then filtered queries against a real in-memory Chroma collection. Its vectors are nearly identical on purpose, so similarity can't decide the result and only the filter does. It covers `str`, `int`, `bool` and `float` values, AND between metadata pairs, AND between ids and metadata, and filters that match nothing.
+- `tests/integration/test_filters.py` (33 tests): filtered `/search` and `/ask` over HTTP, `null` and `{}` filters, an `/ask` filter that excludes every relevant document (fixed answer, no LLM call), 12 invalid filter shapes on both endpoints, and the inclusive limits (100 ids, 10 pairs).
 
 ---
 

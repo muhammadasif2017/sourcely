@@ -3,6 +3,7 @@
 from fastapi import APIRouter, status
 
 from app.api.deps import EmbedderDep, LLMDep, SettingsDep, StoreDep
+from app.api.routes.search import where_from
 from app.core.errors import AppError
 from app.schemas.ask import AskRequest, AskResponse
 from app.schemas.search import SearchHit
@@ -31,6 +32,7 @@ def ask(
             embedder,
             store,
             llm,
+            where_from(body.filters),
         )
     except LLMError as exc:
         raise AppError(exc.status_code, exc.detail) from exc

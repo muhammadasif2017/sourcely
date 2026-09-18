@@ -11,7 +11,7 @@ Each diagram is labelled **Built**, **Specced** or **Proposed**. Specced diagram
 | [FD-3](#fd-3-ingest-json-text) | Ingest JSON text, `POST /documents` | **Built** |
 | [FD-4](#fd-4-upload-a-file-with-background-processing) | Upload a file with background processing | Proposed |
 | [FD-5](#fd-5-ingestion-worker-and-job-states) | Ingestion worker and job states | Proposed |
-| [FD-6](#fd-6-semantic-search) | Semantic search, `POST /search` | Specced |
+| [FD-6](#fd-6-semantic-search) | Semantic search, `POST /search` | **Built** |
 | [FD-7](#fd-7-ask) | Ask, `POST /ask` | **Built** |
 | [FD-8](#fd-8-streamed-ask-with-follow-up-rewriting) | Streamed ask with follow-up rewriting | Specced, rewriting Proposed |
 | [FD-9](#fd-9-sign-up-verify-and-sign-in) | Sign up, verify and sign in | Proposed |
@@ -221,7 +221,7 @@ Backoff between attempts: 30 seconds, then 2 minutes.
 
 ## FD-6. Semantic search
 
-`POST /search`. **Specced** (Task 4). The vector store is Chroma in the PoC and pgvector after D3. The route doesn't change.
+`POST /search`. **Built** (Tasks 4 and 8). The vector store is Chroma in the PoC and pgvector after D3. The route doesn't change.
 
 ```mermaid
 sequenceDiagram

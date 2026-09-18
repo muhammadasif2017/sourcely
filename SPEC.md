@@ -84,6 +84,8 @@ Request: `{ "query": "…", "top_k": 4, "filters": { "document_ids": ["a", "b"],
 
 When both fields are present, a chunk must satisfy both. The server translates filters into a Chroma `where` clause (`$in`, `$eq`, `$and`).
 
+Settled in Task 8: `filters: null` and `filters: {}` both mean no filtering. An unknown field inside `filters` returns 422, so a misspelling such as `document_id` can't silently widen the search to everything. `document_id`, `chunk_index` and `title` are rejected as metadata keys, as at ingestion; use `document_ids` to filter by document. Matching is exact and typed: `2026` and `"2026"` are different values.
+
 Response **200**:
 
 ```json

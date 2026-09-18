@@ -15,6 +15,23 @@ MAX_TITLE_CHARS = 200
 _METADATA_KEY = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,63}$")
 
 
+def check_metadata_keys(
+    metadata: dict[str, MetadataValue], max_keys: int
+) -> dict[str, MetadataValue]:
+    """Apply the metadata key rules shared by ingestion and filters. Raises `ValueError`."""
+    if len(metadata) > max_keys:
+        raise ValueError(f"metadata allows at most {max_keys} keys")
+    for key in metadata:
+        if key in RESERVED_METADATA_KEYS:
+            raise ValueError(f"metadata key '{key}' is reserved")
+        if not _METADATA_KEY.match(key):
+            raise ValueError(
+                f"metadata key '{key}' must start with a letter and contain only "
+                "letters, digits and underscores (max 64 characters)"
+            )
+    return metadata
+
+
 class DocumentCreate(BaseModel):
     """One text document to ingest. The size limit is checked in the route (413, not 422)."""
 
@@ -33,17 +50,7 @@ class DocumentCreate(BaseModel):
     @field_validator("metadata")
     @classmethod
     def _check_metadata_keys(cls, metadata: dict[str, MetadataValue]) -> dict[str, MetadataValue]:
-        if len(metadata) > MAX_METADATA_KEYS:
-            raise ValueError(f"metadata allows at most {MAX_METADATA_KEYS} keys")
-        for key in metadata:
-            if key in RESERVED_METADATA_KEYS:
-                raise ValueError(f"metadata key '{key}' is reserved")
-            if not _METADATA_KEY.match(key):
-                raise ValueError(
-                    f"metadata key '{key}' must start with a letter and contain only "
-                    "letters, digits and underscores (max 64 characters)"
-                )
-        return metadata
+        return check_metadata_keys(metadata, MAX_METADATA_KEYS)
 
 
 class DocumentSummary(BaseModel):

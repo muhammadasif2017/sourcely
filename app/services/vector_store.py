@@ -2,10 +2,12 @@
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from typing import Any
 
 from chromadb.api import ClientAPI
 
 Metadata = Mapping[str, str | int | float | bool]
+Where = dict[str, Any]
 
 # Stored on every chunk by `replace_document`. Hits expose them as their own fields.
 _RESERVED_KEYS = frozenset({"document_id", "chunk_index", "title"})
@@ -83,8 +85,12 @@ class VectorStore:
         self._collection.delete(where={"document_id": document_id})
         return True
 
-    def query(self, embedding: Sequence[float], top_k: int) -> list[ChunkHit]:
+    def query(
+        self, embedding: Sequence[float], top_k: int, where: Where | None = None
+    ) -> list[ChunkHit]:
         """Return up to `top_k` chunks nearest to `embedding`, most similar first.
+
+        `where` (from `build_where`) restricts which chunks can match.
 
         The collection uses cosine distance, so `score = 1 - distance` is cosine similarity.
         An empty collection returns `[]`.
@@ -93,6 +99,7 @@ class VectorStore:
         result = self._collection.query(
             query_embeddings=vector,
             n_results=top_k,
+            where=where,
             include=["documents", "metadatas", "distances"],
         )
         # One query vector in, so every result list holds exactly one inner list.
@@ -144,6 +151,25 @@ class VectorStore:
                 for i in range(len(chunks))
             ],
         )
+
+
+def build_where(document_ids: Sequence[str] | None, metadata: Metadata | None) -> Where | None:
+    """Translate search filters into a Chroma `where` clause, or None for no filtering.
+
+    Document ids become `$in`, each metadata pair an exact `$eq`, and several conditions are
+    joined with `$and`. A single condition is returned unwrapped, because Chroma rejects an
+    `$and` with fewer than two items.
+    """
+    conditions: list[Where] = []
+    if document_ids:
+        conditions.append({"document_id": {"$in": list(document_ids)}})
+    for key, value in (metadata or {}).items():
+        conditions.append({key: {"$eq": value}})
+    if not conditions:
+        return None
+    if len(conditions) == 1:
+        return conditions[0]
+    return {"$and": conditions}
 
 
 def _client_metadata(meta: Mapping[str, object]) -> dict[str, str | int | float | bool]:
