@@ -295,6 +295,10 @@ Answer in your own words. The goal is to understand *why*, not to memorise. Ques
 
 > ruff for lint and format, mypy in strict mode for types, and pytest for behaviour. They run locally through pre-commit hooks on every commit and in GitHub Actions CI on every push or PR. pre-commit also blocks committing private keys.
 
+**Q: How did you know the project was finished?**
+
+> The spec listed eight success criteria before any code, such as "a new developer can follow the README from clone to a working `/ask`" and "after DELETE the document is gone from list and search". At the end I recorded evidence for each one in the spec: a test name, a live run, or both. For the README I didn't just read it: I ran every command in it against a fresh index, and fixed the two example values that didn't match the real output. The one gap is stated openly: the Claude path has unit tests but no live run, because I had no key.
+
 **Q: Why uv?**
 
 > It's fast, and it manages the Python version, the virtualenv, dependencies and a lockfile in one tool. `uv.lock` makes installs reproducible, so CI and Docker get exactly the versions tested locally.

@@ -56,7 +56,7 @@ config ──┬── chunking
 
 ### Phase 4: Ship
 - [x] Task 10: Docker
-- [ ] Task 11: README and final verification against the spec's success criteria
+- [x] Task 11: README and final verification against the spec's success criteria
 
 ### Checkpoint D: complete
 - [ ] Every success criterion in `SPEC.md` has evidence. Ready for review.

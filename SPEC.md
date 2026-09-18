@@ -283,6 +283,21 @@ def chunk_text(text: str, size: int, overlap: int) -> list[str]:
 7. After `DELETE`, the document is gone from `GET /documents` and from `/search` results.
 8. `docker compose up --build` serves a healthy API, and the data survives a container restart.
 
+### Evidence (final verification, 2026-09-19)
+
+| # | Criterion | Evidence |
+|---|---|---|
+| 1 | Tests and lint | `uv run pytest -q`: 233 passed. `ruff check`, `ruff format --check` and `mypy` (strict): clean. The pre-commit hooks run the same checks on every commit, and CI runs them on push. |
+| 2 | Live ingest, search, ask; persistence | Following the README against a fresh `CHROMA_PATH` with Gemini `gemini-3.5-flash-lite`: `POST /documents` returned 201; `/search` "how many vacation days do I get" ranked `leave-policy` first (0.65); `/ask` "Do part-time workers get holiday?" answered "Yes, part-time staff receive paid annual leave (holiday) pro-rated to their contracted hours [1]." citing `leave-policy` (0.71). Persistence: at Checkpoint B a restart with the same `CHROMA_PATH` kept both chunks and search still found the right document. |
+| 3 | Absent topic, no LLM call | `/ask` "What is the capital of France?" returned the fixed answer with `sources: []`. `test_off_topic_question_skips_llm` and `test_empty_store_returns_fixed_answer_without_llm_call` assert the LLM is never called. |
+| 4 | Every error row | Each row has a test: 422 (`test_invalid_input_returns_422` for every endpoint, invalid filters and uploads), 404 (`test_delete_unknown_returns_404`), 413 (`test_text_over_limit_returns_413`, `test_declared_length_over_limit_returns_413`, `test_chunked_body_over_limit_returns_413`), 415 (`test_other_file_types_return_415`), 400 (`test_invalid_content_length_returns_400`), 503 not configured (`test_missing_key_returns_503`), 502/503/504 (`test_llm_errors_map_to_their_status`, `test_error_before_first_token_keeps_http_status`, and the SDK mapping tests in `tests/unit/test_llm.py`), 500 (`test_unhandled_error_returns_generic_500`). Live: Gemini's bad-key 400 became a 502 in Task 5; a 2.2 MB upload got 413 in Docker. |
+| 5 | README from clone to `/ask` | Every README curl example was run as written against a fresh index: health, ingest, upload, list, search, ask, off-topic ask, stream, delete (204, then 404). The only differences were two example values (`characters`, a search score), corrected to the real output. |
+| 6 | Live streaming | `curl -N` against Gemini on a real `uvicorn` server: `sources`, then separate `token` events arriving over about 2 seconds, then `done` (Task 9, and again in the README run). |
+| 7 | Delete removes from list and search | Live in the README run: after `DELETE /documents/leave-policy`, `GET /documents` listed only `team-notes`, and `/search` returned only `team-notes`. Tests: `test_deleted_document_is_gone_from_search`, `test_delete_returns_204_and_removes_every_chunk`. |
+| 8 | Docker healthy, data survives restart | Task 10: container healthy about 30 s after start, running as non-root `sourcely`; ingest, search and a live `/ask` worked; after `docker compose restart`, `chunks_indexed` was unchanged and the model wasn't downloaded again. |
+
+Not verified live: the Anthropic (Claude) path, because no key was available. It is covered by unit tests against the installed SDK's request shape, and the README says so.
+
 ## Out of scope (possible next steps)
 
 Auth, PDF and DOCX parsing, pagination for `GET /documents`, range and `$or` filters, hybrid (BM25 plus vector) search, reranking, an evaluation harness, and a Qdrant backend.

@@ -29,8 +29,9 @@ The log is updated at the end of every task.
 14. [Step 13 (Task 8): Filters on `/search` and `/ask`](#step-13-task-8-filters-on-search-and-ask)
 15. [Step 14 (Task 9): Streaming answers, `POST /ask/stream`](#step-14-task-9-streaming-answers-post-askstream)
 16. [Step 15 (Task 10): Docker, and a request size limit](#step-15-task-10-docker-and-a-request-size-limit)
-17. [How to run everything built so far](#how-to-run-everything-built-so-far)
-18. [Glossary](#glossary)
+17. [Step 16 (Task 11): README and final verification](#step-16-task-11-readme-and-final-verification)
+18. [How to run everything built so far](#how-to-run-everything-built-so-far)
+19. [Glossary](#glossary)
 
 ---
 
@@ -821,6 +822,26 @@ The first container failed to start with `Permission denied (os error 13)` while
 
 - `tests/integration/test_request_limit.py` (8 tests): a body exactly at the limit is accepted; a declared length over it gets 413 with a request id and nothing stored; chunked bodies over and under the limit; an oversized upload; an invalid `Content-Length` (400); GET requests unaffected; and the default fits the largest valid document.
 - In Docker: healthy about 30 seconds after start; `/health` 200; ingest 201; search found the right document (0.656); a live `/ask` through Gemini answered "No, monthly plans are not refundable [1]."; a 2.2 MB upload got 413; the process runs as `sourcely`; after `docker compose restart`, `chunks_indexed` was still 1 and the model wasn't downloaded again.
+
+---
+
+## Step 16 (Task 11): README and final verification
+
+The last task produces no new behaviour. It makes the project usable by someone else, and proves the spec is met.
+
+### 16.1 The README
+
+`README.md` is written for a developer who has just cloned the repository. It covers the two ways to run the service (Docker, or uv), getting a free Gemini key, switching to OpenAI, Claude or Ollama, a curl example with real output for every endpoint, the error statuses, configuration, a short architecture tour, known limits and next steps. It states plainly that the Claude path is untested live, and puts the free-tier data warning near the top, where people will see it.
+
+It also records two traps found during the build: environment variables override `.env` (the Checkpoint B problem), and `uvicorn app.main:app` doesn't work because the app is built by a factory.
+
+### 16.2 Verifying the README by following it
+
+Documentation drifts from code silently, so the README was checked by *running* it: a fresh server with an empty index, then every curl command exactly as written. All of them worked. Two example values were wrong (the character count was 129, not 130, and a search score was 0.65, not 0.71), so they were corrected to the real output.
+
+### 16.3 Evidence for every success criterion
+
+`SPEC.md` listed eight success criteria at the start. Each one now has recorded evidence under "Evidence" in `SPEC.md`: a test name, a live run, or both. Writing the criteria before building, and the evidence after, is what makes "done" checkable instead of a feeling.
 
 ---
 

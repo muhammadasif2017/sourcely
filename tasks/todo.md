@@ -105,7 +105,7 @@ Every task also meets the Definition of Done:
   - Verify: build the image, `curl /health`, restart the container, and confirm `chunks_indexed` is unchanged.
   - Files: `Dockerfile`, `docker-compose.yml`, `.dockerignore`
 
-- [ ] **Task 11: README and final verification** (S)
+- [x] **Task 11: README and final verification** (S)
   - Acceptance:
     - The README covers setup with uv and with Docker, getting a free Gemini key, switching to OpenAI, Claude or Ollama, a curl example for every endpoint, architecture, the free-tier data warning, the fact that Claude is untested live, known limits and next steps.
     - Every success criterion in `SPEC.md` has evidence.
