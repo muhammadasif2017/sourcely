@@ -342,13 +342,13 @@ The PoC paths stay exactly as the client's brief fixed them. New endpoints are *
 |---|---|---|---|
 | `GET /health` | Liveness, index size, configured models | none | **Built** |
 | `POST /documents` | Ingest JSON text, synchronous | Editor | **Built** (auth Proposed) |
-| `POST /documents/upload` | Upload a file | Editor | **Specced** for `.txt` and `.md` (201, synchronous). **Proposed** for PDF and DOCX (202, background), see [D8](#d8-upload-response-once-processing-is-in-the-background) |
-| `GET /documents` | List documents | Viewer | **Specced** (pagination, tags and status Proposed) |
+| `POST /documents/upload` | Upload a file | Editor | **Built** for `.txt` and `.md` (201, synchronous). **Proposed** for PDF and DOCX (202, background), see [D8](#d8-upload-response-once-processing-is-in-the-background) |
+| `GET /documents` | List documents | Viewer | **Built** (pagination, tags and status Proposed) |
 | `GET /documents/{id}` | Document detail with versions | Viewer | **Proposed** |
 | `GET /documents/{id}/chunks` | Chunks for the detail page | Viewer | **Proposed** |
 | `PATCH /documents/{id}` | Edit title and tags | Editor | **Proposed** |
 | `POST /documents/{id}/retry` | Re-queue a failed version | Editor | **Proposed** |
-| `DELETE /documents/{id}` | Delete a document | Editor | **Specced** |
+| `DELETE /documents/{id}` | Delete a document | Editor | **Built** |
 | `POST /search` | Semantic search | Viewer | **Specced** |
 | `POST /ask` | Answer with sources | Viewer | **Specced** (`conversation_id` Proposed) |
 | `POST /ask/stream` | Streamed answer, SSE | Viewer | **Specced** (`conversation_id` and `search_query` in the `sources` event Proposed) |

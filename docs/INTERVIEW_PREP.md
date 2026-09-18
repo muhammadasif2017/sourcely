@@ -99,6 +99,14 @@ Answer in your own words. The goal is to understand *why*, not to memorise. Ques
 
 > `POST /documents` validates the body with Pydantic, checks the size limit, splits the text with `chunk_text`, embeds all chunks in one batch, and stores them in Chroma with ids `{document_id}:{i}` and metadata holding `document_id`, `chunk_index`, `title` and the client's own keys. It returns 201 with the id, title, chunk count and character count.
 
+**Q: How do you list documents when the vector store only holds chunks?** (Task 7)
+
+> Every chunk carries `document_id`, `chunk_index`, `title` and the client's metadata. Listing reads only the metadata of all chunks, groups them by `document_id` and counts them. It's O(chunks), which I'd call out as a scaling limit: the real fix is a separate documents table, which the product plan puts in Postgres.
+
+**Q: Why check existence before deleting?**
+
+> The spec wants 204 for a real delete and 404 for an unknown id, but Chroma's `delete` doesn't say how many rows it removed. So I fetch at most one chunk id first, with `include=[]` so nothing else comes back. It's not atomic, but a race only means two clients both get 204 for a document that is gone either way.
+
 **Q: How does the file upload endpoint protect the server?** (Task 6)
 
 > It checks cheap things first. The extension must be `.txt` or `.md` (415 otherwise). Then it reads at most 4 bytes per allowed character plus one: UTF-8 uses at most 4 bytes per character, so a bigger file can't be within the limit, and it's rejected with 413 without being loaded whole. Then it decodes UTF-8 (422 if invalid) and applies the same character limit as the JSON route. One honest gap: Starlette spools the whole upload to a temporary file before the route runs, so the request size itself must be capped in front of the app, at the reverse proxy.

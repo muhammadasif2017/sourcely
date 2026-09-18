@@ -72,7 +72,7 @@ Returns **200** `{ "documents": [ { "document_id": "…", "title": "…", "chunk
 
 ### `DELETE /documents/{document_id}`: delete a document
 
-Removes every chunk of that document. Returns **204** when the document existed and **404** when it did not.
+Removes every chunk of that document. Returns **204** when the document existed and **404** when it did not, with `{"detail": "Document '<id>' not found"}`. An id that breaks the `document_id` pattern returns **422**, because no stored document can have it.
 
 ### `POST /search`: semantic search
 

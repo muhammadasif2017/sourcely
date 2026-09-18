@@ -23,6 +23,16 @@ class ChunkHit:
     metadata: dict[str, str | int | float | bool]
 
 
+@dataclass(frozen=True)
+class StoredDocument:
+    """One stored document, rebuilt from its chunks' metadata."""
+
+    document_id: str
+    title: str
+    chunks: int
+    metadata: dict[str, str | int | float | bool]
+
+
 class VectorStore:
     """Stores document chunks with their embeddings and metadata."""
 
@@ -38,6 +48,40 @@ class VectorStore:
     def count(self) -> int:
         """Number of chunks stored."""
         return self._collection.count()
+
+    def list_documents(self) -> list[StoredDocument]:
+        """Every stored document with its chunk count, sorted by `document_id`.
+
+        Chroma has no document table, so this reads every chunk's metadata: the cost grows with
+        the number of chunks. Fine for a PoC, and noted in SPEC.md as a scaling limit.
+        """
+        metadatas = self._collection.get(include=["metadatas"])["metadatas"] or []
+        counts: dict[str, int] = {}
+        first: dict[str, Mapping[str, object]] = {}
+        for meta in metadatas:
+            if meta is None:
+                continue
+            document_id = str(meta["document_id"])
+            counts[document_id] = counts.get(document_id, 0) + 1
+            # Every chunk of a document carries the same title and metadata.
+            first.setdefault(document_id, meta)
+        return [
+            StoredDocument(
+                document_id=document_id,
+                title=str(first[document_id].get("title", "")),
+                chunks=counts[document_id],
+                metadata=_client_metadata(first[document_id]),
+            )
+            for document_id in sorted(counts)
+        ]
+
+    def delete_document(self, document_id: str) -> bool:
+        """Delete every chunk of a document. Returns False when it had no chunks."""
+        existing = self._collection.get(where={"document_id": document_id}, limit=1, include=[])
+        if not existing["ids"]:
+            return False
+        self._collection.delete(where={"document_id": document_id})
+        return True
 
     def query(self, embedding: Sequence[float], top_k: int) -> list[ChunkHit]:
         """Return up to `top_k` chunks nearest to `embedding`, most similar first.

@@ -47,7 +47,7 @@ config ──┬── chunking
 
 ### Phase 3: Extras
 - [x] Task 6: `POST /documents/upload`
-- [ ] Task 7: `GET /documents` and `DELETE /documents/{id}`
+- [x] Task 7: `GET /documents` and `DELETE /documents/{id}`
 - [ ] Task 8: Metadata and document filters on `/search` and `/ask`
 - [ ] Task 9: `POST /ask/stream` (SSE)
 

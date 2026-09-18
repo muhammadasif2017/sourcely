@@ -71,7 +71,7 @@ Every task also meets the Definition of Done:
   - Verify: API tests. `python-multipart` is added to the dependencies.
   - Files: `app/api/routes/documents.py`, `pyproject.toml`, `tests/integration/test_documents.py`
 
-- [ ] **Task 7: `GET /documents` and `DELETE /documents/{id}`** (S)
+- [x] **Task 7: `GET /documents` and `DELETE /documents/{id}`** (S)
   - Acceptance:
     - The list returns each document with its title, chunk count and metadata, sorted by id.
     - Delete returns 204 and removes all chunks. An unknown id returns 404. A deleted document no longer appears in search.

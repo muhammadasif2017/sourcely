@@ -25,8 +25,9 @@ The log is updated at the end of every task.
 10. [Step 9 (Task 5): Answering questions, `POST /ask`](#step-9-task-5-answering-questions-post-ask)
 11. [Step 10: Checkpoint B, live check and calibration](#step-10-checkpoint-b-live-check-and-calibration)
 12. [Step 11 (Task 6): File upload, `POST /documents/upload`](#step-11-task-6-file-upload-post-documentsupload)
-13. [How to run everything built so far](#how-to-run-everything-built-so-far)
-14. [Glossary](#glossary)
+13. [Step 12 (Task 7): Listing and deleting documents](#step-12-task-7-listing-and-deleting-documents)
+14. [How to run everything built so far](#how-to-run-everything-built-so-far)
+15. [Glossary](#glossary)
 
 ---
 
@@ -624,6 +625,45 @@ The chunk, embed and store steps moved from the JSON route into `app/services/in
 ### 11.5 A limit that remains
 
 Starlette writes the whole upload to a temporary file *before* the route runs. The byte cap limits what we read, not what the server receives. The request size itself should be capped in front of the app, which is part of Task 10 (Docker).
+
+---
+
+## Step 12 (Task 7): Listing and deleting documents
+
+Two small endpoints that make the store manageable: see what's in it, and remove what shouldn't be searchable any more.
+
+### 12.1 `GET /documents`: rebuilding documents from chunks
+
+Chroma stores *chunks*, not documents. There is no document table to read. So `VectorStore.list_documents()` reads the metadata of every chunk (`collection.get(include=["metadatas"])`), groups by `document_id`, counts the chunks, and takes the title and client metadata from the first chunk of each group. Every chunk of a document carries the same title and metadata, because `replace_document` writes them onto each one. The result is sorted by `document_id`.
+
+**The cost** grows with the number of *chunks*, not documents: listing 10 documents of 1,000 chunks each reads 10,000 metadata records. That's fine for a PoC and was accepted in `SPEC.md` as a known scaling limit. The product plan fixes it with a real `documents` table in Postgres.
+
+`include=["metadatas"]` matters: without it, Chroma would also return every chunk's text, and embeddings can be requested too. Asking only for what's needed keeps the call light.
+
+### 12.2 `DELETE /documents/{document_id}`
+
+```python
+existing = self._collection.get(where={"document_id": document_id}, limit=1, include=[])
+if not existing["ids"]:
+    return False
+self._collection.delete(where={"document_id": document_id})
+```
+
+The existence check fetches at most one chunk id and nothing else (`include=[]`), because we only need to know whether any chunk exists. Chroma's `delete` doesn't report how many rows it removed, so without the check we couldn't tell a real delete (204) from an unknown id (404).
+
+**204 No Content** means "done, and there is nothing to return". The route returns a bare `Response(status_code=204)`, so the body is truly empty, which is what HTTP requires for a 204.
+
+**Path validation.** `Path(pattern=DOCUMENT_ID_PATTERN)` applies the same id rule as ingestion. An id that could never have been stored (`has space`, 129 characters) gets **422**, a malformed request, rather than 404.
+
+**Not atomic.** Check-then-delete is two calls. If two clients delete the same id at the same moment, both may see it and both get 204. The outcome is still correct (the document is gone), so a PoC can accept that.
+
+### 12.3 Naming
+
+The store returns a frozen dataclass `StoredDocument`, and the route maps it to the Pydantic `DocumentSummary`. Two different names keep the service type and the HTTP shape from being confused, the same split as `ChunkHit` and `SearchHit`.
+
+### 12.4 Tests (`tests/integration/test_manage_documents.py`)
+
+9 tests, written first and run red: the empty list, sorting with titles, chunk counts and client metadata only, the list after a shorter re-ingest, an uploaded file appearing with its file name as title, delete returning an empty 204 and removing every chunk while other documents stay, the deleted document disappearing from `/search`, 404 for an unknown id and for a second delete, and 422 for invalid ids.
 
 ---
 

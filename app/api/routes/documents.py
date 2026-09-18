@@ -4,7 +4,7 @@ import uuid
 from pathlib import PureWindowsPath
 from typing import Annotated
 
-from fastapi import APIRouter, File, Form, UploadFile, status
+from fastapi import APIRouter, File, Form, Path, Response, UploadFile, status
 
 from app.api.deps import EmbedderDep, SettingsDep, StoreDep
 from app.core.config import Settings
@@ -14,6 +14,8 @@ from app.schemas.documents import (
     MAX_TITLE_CHARS,
     DocumentCreate,
     DocumentCreated,
+    DocumentList,
+    DocumentSummary,
 )
 from app.services.embeddings import Embedder
 from app.services.ingestion import ingest_text
@@ -34,6 +36,32 @@ def create_document(
     return _ingest(
         body.text, body.document_id, body.title or "", body.metadata, settings, embedder, store
     )
+
+
+@router.get("/documents", response_model=DocumentList)
+def list_documents(store: StoreDep) -> DocumentList:
+    """List stored documents with their title, chunk count and metadata, sorted by id."""
+    return DocumentList(
+        documents=[
+            DocumentSummary(
+                document_id=doc.document_id,
+                title=doc.title,
+                chunks=doc.chunks,
+                metadata=doc.metadata,
+            )
+            for doc in store.list_documents()
+        ]
+    )
+
+
+@router.delete("/documents/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_document(
+    document_id: Annotated[str, Path(pattern=DOCUMENT_ID_PATTERN)], store: StoreDep
+) -> Response:
+    """Delete a document and all its chunks, so it no longer appears in search or answers."""
+    if not store.delete_document(document_id):
+        raise AppError(status.HTTP_404_NOT_FOUND, f"Document '{document_id}' not found")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post(

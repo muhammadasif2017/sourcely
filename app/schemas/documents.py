@@ -46,6 +46,21 @@ class DocumentCreate(BaseModel):
         return metadata
 
 
+class DocumentSummary(BaseModel):
+    """One stored document in the list."""
+
+    document_id: str
+    title: str
+    chunks: int
+    metadata: dict[str, MetadataValue]
+
+
+class DocumentList(BaseModel):
+    """All stored documents, sorted by `document_id`."""
+
+    documents: list[DocumentSummary]
+
+
 class DocumentCreated(BaseModel):
     """Summary of an ingested document."""
 
