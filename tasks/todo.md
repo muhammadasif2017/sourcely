@@ -64,7 +64,7 @@ Every task also meets the Definition of Done:
 
 ## Phase 3: Extras
 
-- [ ] **Task 6: `POST /documents/upload`** (S)
+- [x] **Task 6: `POST /documents/upload`** (S)
   - Acceptance:
     - Accepts a `.txt` or `.md` multipart file plus an optional `document_id`. The title defaults to the filename, and the same rules as `POST /documents` apply.
     - Other extensions return 415. A file that is not UTF-8 returns 422.

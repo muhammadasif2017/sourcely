@@ -64,6 +64,8 @@ Response **201**:
 
 The request has a `file` field and an optional `document_id` field. The server decodes the file as UTF-8, uses the filename as the default title, then follows the same rules as `POST /documents`. Any other file extension returns **415**. A file that is not valid UTF-8 returns **422**.
 
+Details settled in Task 6: the extension check ignores case (`.MD` is accepted). A UTF-8 byte order mark is removed. The title is the file's base name, without any client-side path, cut to 200 characters. An empty or whitespace-only file returns 422. The server reads at most `4 × MAX_DOCUMENT_CHARS` bytes (the most a text within the character limit can take in UTF-8) and returns 413 beyond that, so an oversized file is never held in memory whole. Metadata can't be sent with an upload; use `POST /documents` for that.
+
 ### `GET /documents`: list documents
 
 Returns **200** `{ "documents": [ { "document_id": "…", "title": "…", "chunks": 7, "metadata": {} } ] }`, sorted by `document_id`. The server builds the list by reading chunk metadata, so its cost grows with the number of chunks. That is acceptable for a PoC and noted as a scaling limit.

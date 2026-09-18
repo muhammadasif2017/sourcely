@@ -11,6 +11,7 @@ MetadataValue = str | int | Annotated[float, Field(allow_inf_nan=False)] | bool
 DOCUMENT_ID_PATTERN = r"^[A-Za-z0-9._-]{1,128}$"
 RESERVED_METADATA_KEYS = frozenset({"document_id", "chunk_index", "title"})
 MAX_METADATA_KEYS = 20
+MAX_TITLE_CHARS = 200
 _METADATA_KEY = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,63}$")
 
 
@@ -19,7 +20,7 @@ class DocumentCreate(BaseModel):
 
     text: str
     document_id: str | None = Field(None, pattern=DOCUMENT_ID_PATTERN)
-    title: str | None = Field(None, max_length=200)
+    title: str | None = Field(None, max_length=MAX_TITLE_CHARS)
     metadata: dict[str, MetadataValue] = Field(default_factory=dict)
 
     @field_validator("text")

@@ -410,6 +410,10 @@ It has already caught a real issue: a function declared to return `list[float]` 
 
 **Why chosen.** FastAPI requires it for any endpoint that accepts `UploadFile` or `Form` fields. We need it for `POST /documents/upload`. There's no real alternative: it's FastAPI's documented dependency for form data.
 
+**Where used.** `app/api/routes/documents.py` (`upload_document`, Task 6), through FastAPI's `UploadFile`, `File` and `Form`. Version 0.0.32.
+
+**Limits.** Starlette spools the uploaded file to a temporary file before the route runs, so the whole upload is received even if the route then rejects it. The route caps how much it *reads*, but the request body size itself should be capped in front of the app (the reverse proxy or container in Task 10).
+
 ---
 
 ## 20. Server-Sent Events (Task 9)

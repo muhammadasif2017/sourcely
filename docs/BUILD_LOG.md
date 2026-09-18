@@ -24,8 +24,9 @@ The log is updated at the end of every task.
 9. [Step 8 (Task 4): Semantic search, `POST /search`](#step-8-task-4-semantic-search-post-search)
 10. [Step 9 (Task 5): Answering questions, `POST /ask`](#step-9-task-5-answering-questions-post-ask)
 11. [Step 10: Checkpoint B, live check and calibration](#step-10-checkpoint-b-live-check-and-calibration)
-12. [How to run everything built so far](#how-to-run-everything-built-so-far)
-13. [Glossary](#glossary)
+12. [Step 11 (Task 6): File upload, `POST /documents/upload`](#step-11-task-6-file-upload-post-documentsupload)
+13. [How to run everything built so far](#how-to-run-everything-built-so-far)
+14. [Glossary](#glossary)
 
 ---
 
@@ -576,6 +577,53 @@ Both put the right document first for 13 of 14 questions.
 - `FastEmbedEmbedder(model, cache_dir, query_prefix)` prepends the prefix in `embed_query` only. Three unit tests use a fake fastembed model to prove the prefix reaches queries and never documents.
 - New setting `EMBEDDING_QUERY_PREFIX`, defaulting to bge's instruction. `MIN_RELEVANCE` now defaults to `0.58`.
 - Re-checked through the real app: "Do part-time workers get holiday?" scored 0.713 and got a cited answer; "Can I bring my dog to work?" got the fixed answer without an LLM call.
+
+---
+
+## Step 11 (Task 6): File upload, `POST /documents/upload`
+
+Clients can now send a `.txt` or `.md` file instead of JSON. The rules are the same as `POST /documents`, so both routes now share one ingest step.
+
+```
+multipart form -> extension check (415) -> read with a byte cap (413) -> decode UTF-8 (422)
+               -> blank check (422) -> same path as POST /documents -> 201
+```
+
+### 11.1 Multipart form data
+
+A browser or `curl -F` sends files as `multipart/form-data`: the body is split into *parts*, one per field, each with its own headers. FastAPI parses it with the `python-multipart` package, added with `uv add python-multipart` (it was already in the spec's tech stack, so no approval was needed).
+
+```python
+def upload_document(
+    file: Annotated[UploadFile, File(description="A UTF-8 `.txt` or `.md` file")],
+    ...,
+    document_id: Annotated[str | None, Form(pattern=DOCUMENT_ID_PATTERN)] = None,
+)
+```
+
+`UploadFile` gives the file name and a file object. `Form(pattern=...)` validates the optional `document_id` exactly like the JSON route does, so a bad id is a 422 before our code runs.
+
+### 11.2 The checks, in order
+
+1. **Extension** (`415 Unsupported Media Type`): `.txt` or `.md`, in any case. `archive.txt.zip` is rejected because only the last extension counts.
+2. **Size, in bytes, before decoding** (`413`): the route reads at most `4 × MAX_DOCUMENT_CHARS + 1` bytes. A UTF-8 character takes at most 4 bytes, so anything bigger can't be within the character limit. This keeps a huge upload from being loaded into memory whole.
+3. **Encoding** (`422`): decoded with `utf-8-sig`, which also removes the *byte order mark* that some Windows editors put at the start of UTF-8 files. Without that, the first chunk would start with an invisible character.
+4. **Blank** (`422`): an empty or whitespace-only file.
+5. **Size, in characters** (`413`): the same check as the JSON route. A test proves the limit counts characters, not bytes: 5,000 `é` characters (10,000 bytes) are accepted at a 5,000-character limit.
+
+The title is the file's base name. `PureWindowsPath(name).name` drops any path a client sends (`C:\Users\me\notes.txt` or `/home/me/notes.txt` both become `notes.txt`), because it splits on both kinds of slash. It's cut to 200 characters, the title limit.
+
+### 11.3 Refactor: one ingest path
+
+The chunk, embed and store steps moved from the JSON route into `app/services/ingestion.py` (`ingest_text`), following the rule that logic lives in services. Both routes call a small `_ingest` helper that applies the character limit and generates the id. The Task 3 tests passed unchanged, which shows the refactor kept the behaviour.
+
+### 11.4 Tests (`tests/integration/test_upload.py`)
+
+22 tests, written first and run red: the 201 body with the file name as title, `.md` and mixed-case extensions, the generated id, replace on re-upload, the uploaded text being searchable, BOM removal, client paths stripped from the title, long names cut to 200 characters, 4 rejected file types (415), non-UTF-8 (422), empty and blank files (422), a bad id (422), a missing file (422), the limit and its exact boundary (413 and 201), and characters counted rather than bytes.
+
+### 11.5 A limit that remains
+
+Starlette writes the whole upload to a temporary file *before* the route runs. The byte cap limits what we read, not what the server receives. The request size itself should be capped in front of the app, which is part of Task 10 (Docker).
 
 ---
 

@@ -46,7 +46,7 @@ config ──┬── chunking
 - [x] Real fastembed model and Gemini: ingest, then search, then ask all work. The "no information" path makes no LLM call. `MIN_RELEVANCE` is calibrated and recorded in `SPEC.md`.
 
 ### Phase 3: Extras
-- [ ] Task 6: `POST /documents/upload`
+- [x] Task 6: `POST /documents/upload`
 - [ ] Task 7: `GET /documents` and `DELETE /documents/{id}`
 - [ ] Task 8: Metadata and document filters on `/search` and `/ask`
 - [ ] Task 9: `POST /ask/stream` (SSE)

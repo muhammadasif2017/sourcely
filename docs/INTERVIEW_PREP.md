@@ -99,6 +99,14 @@ Answer in your own words. The goal is to understand *why*, not to memorise. Ques
 
 > `POST /documents` validates the body with Pydantic, checks the size limit, splits the text with `chunk_text`, embeds all chunks in one batch, and stores them in Chroma with ids `{document_id}:{i}` and metadata holding `document_id`, `chunk_index`, `title` and the client's own keys. It returns 201 with the id, title, chunk count and character count.
 
+**Q: How does the file upload endpoint protect the server?** (Task 6)
+
+> It checks cheap things first. The extension must be `.txt` or `.md` (415 otherwise). Then it reads at most 4 bytes per allowed character plus one: UTF-8 uses at most 4 bytes per character, so a bigger file can't be within the limit, and it's rejected with 413 without being loaded whole. Then it decodes UTF-8 (422 if invalid) and applies the same character limit as the JSON route. One honest gap: Starlette spools the whole upload to a temporary file before the route runs, so the request size itself must be capped in front of the app, at the reverse proxy.
+
+**Q: Why `utf-8-sig` and not `utf-8`?**
+
+> `utf-8-sig` also removes a byte order mark, an invisible character some Windows editors put at the start of UTF-8 files. Otherwise the first chunk would start with it. For files without a BOM, both decode the same.
+
 **Q: What happens if a client uploads the same document twice?**
 
 > Re-ingesting an id replaces it, so the operation is idempotent. The store first deletes every chunk whose metadata has that `document_id`, then adds the new ones. Deleting by metadata matters: if I only overwrote ids computed from the new chunk count, a shorter new version would leave the old tail chunks behind as orphans that still appear in search. The route also embeds *before* deleting, so a failed embedding keeps the old version intact. It's not fully atomic, though: Chroma has no transactions, so a crash between delete and add would lose the document. For a PoC that's acceptable; production would version chunks or use a store with transactions.
