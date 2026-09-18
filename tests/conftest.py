@@ -1,0 +1,70 @@
+import hashlib
+import math
+import re
+import uuid
+
+import chromadb
+import pytest
+from fastapi.testclient import TestClient
+
+from app.core.config import Settings
+from app.main import create_app
+from app.services.vector_store import VectorStore
+
+DIM = 256
+_WORD = re.compile(r"[a-z0-9]+")
+
+
+class FakeEmbedder:
+    """Deterministic hashed bag-of-words embedder.
+
+    Texts that share words get similar vectors, so ranking in tests behaves like a
+    real (if crude) semantic model without downloading anything.
+    """
+
+    model_name = "fake-embedder"
+
+    def _vector(self, text: str) -> list[float]:
+        vec = [0.0] * DIM
+        for word in _WORD.findall(text.lower()):
+            vec[int(hashlib.md5(word.encode()).hexdigest(), 16) % DIM] += 1.0
+        norm = math.sqrt(sum(v * v for v in vec)) or 1.0
+        return [v / norm for v in vec]
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return [self._vector(t) for t in texts]
+
+    def embed_query(self, text: str) -> list[float]:
+        return self._vector(text)
+
+
+@pytest.fixture
+def settings() -> Settings:
+    return Settings(
+        _env_file=None,
+        llm_provider="openai",
+        openai_api_key="test-key",
+        openai_model="fake-model",
+        chunk_size=200,
+        chunk_overlap=40,
+        max_document_chars=5_000,
+        min_relevance=0.2,
+    )
+
+
+@pytest.fixture
+def store() -> VectorStore:
+    # Ephemeral clients share one in-process database, so each test needs its own collection.
+    return VectorStore(chromadb.EphemeralClient(), f"test-{uuid.uuid4().hex}")
+
+
+@pytest.fixture
+def embedder() -> FakeEmbedder:
+    return FakeEmbedder()
+
+
+@pytest.fixture
+def client(settings, store, embedder):
+    app = create_app(settings, embedder=embedder, store=store)
+    with TestClient(app) as c:
+        yield c
