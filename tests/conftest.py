@@ -9,12 +9,14 @@ import chromadb
 import pytest
 from alembic import command
 from alembic.config import Config
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, make_url, text
+from sqlalchemy import Connection, create_engine, make_url, text
 from sqlalchemy.exc import OperationalError
 
 from app.core.config import Settings
 from app.main import create_app
+from app.services.email import EmailMessage
 from app.services.llm import LLMAnswer
 from app.services.vector_store import VectorStore
 
@@ -83,6 +85,22 @@ TEST_ADMIN_DATABASE_URL = os.environ.get(
     "TEST_ADMIN_DATABASE_URL", "postgresql+psycopg://postgres:postgres@127.0.0.1:5434/postgres"
 )
 ROLES = {"sourcely_owner": "sourcely_owner", "sourcely_app": "sourcely_app"}
+
+
+class FakeEmailSender:
+    """Keeps sent emails in memory instead of logging them."""
+
+    def __init__(self) -> None:
+        self.messages: list[EmailMessage] = []
+
+    def send(self, message: EmailMessage) -> None:
+        self.messages.append(message)
+
+    def last(self, to: str) -> EmailMessage:
+        """The most recent email to `to` (compared case-insensitively)."""
+        matching = [m for m in self.messages if m.to.lower() == to.lower()]
+        assert matching, f"no email to {to}; sent: {[m.to for m in self.messages]}"
+        return matching[-1]
 
 
 @pytest.fixture(scope="session")
@@ -170,6 +188,8 @@ def settings(clean_database) -> Settings:
         _env_file=None,
         database_url=clean_database["app"],
         migration_database_url=clean_database["owner"],
+        # TestClient talks plain HTTP to http://testserver, where Secure cookies aren't sent.
+        cookie_secure=False,
         llm_provider="openai",
         openai_api_key="test-key",
         openai_model="fake-model",
@@ -197,7 +217,32 @@ def llm() -> FakeLLM:
 
 
 @pytest.fixture
-def client(settings, store, embedder, llm):
-    app = create_app(settings, embedder=embedder, store=store, llm=llm)
+def outbox() -> FakeEmailSender:
+    return FakeEmailSender()
+
+
+@pytest.fixture
+def owner_db(clean_database) -> Iterator[Connection]:
+    """A raw autocommit connection as the schema owner, for arranging test data directly."""
+    engine = create_engine(clean_database["owner"], isolation_level="AUTOCOMMIT")
+    with engine.connect() as connection:
+        yield connection
+    engine.dispose()
+
+
+@pytest.fixture
+def app(settings, store, embedder, llm, outbox) -> FastAPI:
+    return create_app(settings, embedder=embedder, store=store, llm=llm, email_sender=outbox)
+
+
+@pytest.fixture
+def anon_client(app) -> Iterator[TestClient]:
+    """A client with no credentials, for sign-up and sign-in flows."""
+    with TestClient(app) as c:
+        yield c
+
+
+@pytest.fixture
+def client(app) -> Iterator[TestClient]:
     with TestClient(app) as c:
         yield c

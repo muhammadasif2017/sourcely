@@ -13,11 +13,12 @@ from fastapi import FastAPI
 from sqlalchemy import Engine
 
 from app.api.middleware import RequestContextMiddleware, RequestSizeLimitMiddleware
-from app.api.routes import ask, documents, health, search
+from app.api.routes import ask, auth, documents, health, search
 from app.core.config import Settings, get_settings
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
 from app.db.engine import make_engine
+from app.services.email import EmailSender, create_email_sender
 from app.services.embeddings import Embedder, FastEmbedEmbedder
 from app.services.llm import LLM, create_llm
 from app.services.vector_store import VectorStore
@@ -32,6 +33,7 @@ def create_app(
     store: VectorStore | None = None,
     llm: LLM | None = None,
     engine: Engine | None = None,
+    email_sender: EmailSender | None = None,
 ) -> FastAPI:
     """Build the app. Components not passed in are created from settings at startup."""
     settings = settings or get_settings()
@@ -41,6 +43,7 @@ def create_app(
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.settings = settings
         app.state.engine = engine or make_engine(settings.database_url)
+        app.state.email_sender = email_sender or create_email_sender(settings)
         app.state.embedder = embedder or FastEmbedEmbedder(
             settings.embedding_model,
             settings.embedding_cache_dir,
@@ -73,6 +76,7 @@ def create_app(
     app.add_middleware(RequestContextMiddleware)
     register_exception_handlers(app)
     app.include_router(health.router)
+    app.include_router(auth.router)
     app.include_router(documents.router)
     app.include_router(search.router)
     app.include_router(ask.router)

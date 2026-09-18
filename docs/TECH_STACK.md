@@ -480,6 +480,20 @@ Also added in Task 12, and explained when first used: `pgvector` (Python package
 
 ---
 
+## 23. argon2-cffi and email-validator (Phase 1, Task 13)
+
+**argon2-cffi** hashes passwords with **Argon2id**, the winner of the Password Hashing Competition and the first recommendation of the OWASP password storage guidance. It's deliberately slow and memory-hungry, so an attacker with a stolen database can try far fewer guesses per second than with a fast hash such as SHA-256. Each hash includes a random salt and its own parameters (`$argon2id$v=19$m=...`), so parameters can be raised later without breaking old hashes. The library's defaults follow RFC 9106.
+
+**Why not bcrypt?** Still acceptable, but it limits passwords to 72 bytes and isn't memory-hard. Argon2id is the current first choice.
+
+**Tokens use SHA-256, not Argon2.** Session, email and invite tokens are 32 random bytes, so there's nothing to guess; a fast hash only has to stop a stolen row from being usable. Passwords are chosen by people and can be guessed, which is what the slow hash is for.
+
+**email-validator** is what Pydantic's `EmailStr` uses to check an address's syntax. It rejects malformed addresses at the edge (422) without sending anything.
+
+**Where used.** `app/core/security.py` (hashing, tokens, the common-password list), `app/schemas/auth.py` (`EmailStr`, password rules), `app/services/accounts.py`.
+
+---
+
 ## Architecture choices that aren't packages
 
 These are patterns, not libraries, but interviewers ask about them:

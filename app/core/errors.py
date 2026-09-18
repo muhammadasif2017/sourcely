@@ -11,10 +11,14 @@ logger = logging.getLogger(__name__)
 class AppError(Exception):
     """An error with an HTTP status and a message that is safe to show clients."""
 
-    def __init__(self, status_code: int, detail: str) -> None:
+    def __init__(
+        self, status_code: int, detail: str, headers: dict[str, str] | None = None
+    ) -> None:
         super().__init__(detail)
         self.status_code = status_code
         self.detail = detail
+        # Extra response headers, such as Retry-After on a 429.
+        self.headers = headers
 
 
 def register_exception_handlers(app: FastAPI) -> None:
@@ -22,7 +26,9 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(AppError)
     async def _app_error(request: Request, exc: AppError) -> JSONResponse:
-        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+        return JSONResponse(
+            status_code=exc.status_code, content={"detail": exc.detail}, headers=exc.headers
+        )
 
     @app.exception_handler(Exception)
     async def _unhandled(request: Request, exc: Exception) -> JSONResponse:

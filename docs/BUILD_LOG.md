@@ -31,8 +31,9 @@ The log is updated at the end of every task.
 16. [Step 15 (Task 10): Docker, and a request size limit](#step-15-task-10-docker-and-a-request-size-limit)
 17. [Step 16 (Task 11): README and final verification](#step-16-task-11-readme-and-final-verification)
 18. [Step 17 (Task 12): Postgres foundation](#step-17-task-12-postgres-foundation)
-19. [How to run everything built so far](#how-to-run-everything-built-so-far)
-20. [Glossary](#glossary)
+19. [Step 18 (Task 13): Accounts and sessions](#step-18-task-13-accounts-and-sessions)
+20. [How to run everything built so far](#how-to-run-everything-built-so-far)
+21. [Glossary](#glossary)
 
 ---
 
@@ -895,6 +896,67 @@ The first full run took 149 seconds instead of 20. `--durations` showed one test
 - CI runs the same image as a **service container** on port 5434.
 
 All 237 tests pass (4 new: health with the database, 503 when it's down, the dimension check, and the app role's limits). The full Compose stack came up with `db` healthy, `migrate` exited 0, and `api` healthy.
+
+---
+
+## Step 18 (Task 13): Accounts and sessions
+
+Sourcely now has users. People sign up, verify their email, sign in and out, and reset a forgotten password. Nothing is protected by it yet: Tasks 14 to 16 put the data endpoints behind it.
+
+### 18.1 The tables (migration `0002`)
+
+| Table | Purpose |
+|---|---|
+| `users` | Email (`citext`, unique, so `Ayesha@Example.com` and `ayesha@example.com` are the same account), name, Argon2id password hash, verified time |
+| `sessions` | One row per signed-in browser: the **SHA-256 of the cookie value**, the CSRF token, and last-seen time |
+| `email_tokens` | Single-use links for verification (24 h) and password reset (1 h), stored hashed |
+| `login_attempts` | Failed sign-ins, for throttling |
+
+The migration was made with `alembic revision --autogenerate`: Alembic compared `app/db/models.py` with the database and wrote the `create_table` calls. The migration template was updated so future files come out ruff-clean.
+
+### 18.2 Passwords
+
+- **Argon2id** (argon2-cffi) with a random salt per hash. See `TECH_STACK.md` for why it, and not SHA-256 or bcrypt.
+- **Rules only when a password is set:** 12 to 128 characters, and not on the common-passwords list. Sign-in accepts any string, so tightening the rules later never locks anyone out.
+- **The common-passwords list.** The spec first said "10,000 common passwords". Checking the popular 10k list showed only **10** of its entries are 12 characters or longer; with a 12-character minimum it would block almost nothing. So the bundled list (`app/core/common_passwords.txt`) is the 1,259 entries of 12 or more characters from the UK NCSC's 100,000 most-used passwords, like `q1w2e3r4t5y6` and `1qaz2wsx3edc`. Checking is case-insensitive. `SPEC.md` was updated to match.
+
+### 18.3 Not revealing who has an account
+
+An attacker can learn which emails are registered from any difference in the response, including its timing. So:
+
+- **Sign-up** always returns the same `202`. For an existing email, nothing is created and the owner gets an "already have an account" email instead. The password is hashed in both cases, so both take equally long.
+- **Sign-in** returns the same `401 "Email or password is incorrect"` for a wrong password and an unknown email. For an unknown email it still verifies a password against a dummy hash, so both paths spend the same Argon2 time.
+- **Password reset** always returns the same `202`, and only sends mail when the account exists.
+
+### 18.4 Sessions and CSRF
+
+Signing in sets two cookies:
+
+- `sourcely_session`: a random 32-byte token. **HttpOnly** (JavaScript can't read it, so an injected script can't steal it), **SameSite=Lax** (not sent on most cross-site requests), and **Secure** (HTTPS only; tests turn this off because the test client uses plain HTTP). The database stores only its SHA-256, so a leaked database can't be turned back into working cookies. A test checks this.
+- `sourcely_csrf`: another random token, **readable** by JavaScript.
+
+**CSRF** (cross-site request forgery) is another site making your browser send a request to Sourcely, carrying your cookie automatically. The defence: every `POST`, `PATCH`, `PUT` or `DELETE` made with a session must also send the CSRF token in an `X-CSRF-Token` header. The web app can read the cookie and copy it into the header; another site can't read it, so it can't forge the header. The comparison uses `secrets.compare_digest`, which takes the same time however many characters match.
+
+Sessions expire after 14 days without use. `last_seen_at` is updated at most every 5 minutes, so reading `/me` doesn't write to the database every time.
+
+### 18.5 Throttling, and a transaction trap
+
+After 5 failed sign-ins for one email within 15 minutes, further attempts get **429** with `Retry-After`, even with the right password. Otherwise an attacker could keep guessing and just watch for the one success.
+
+**The trap.** Each request runs in one transaction (`DbDep`), which **rolls back** when the route raises an error, and a failed sign-in *is* an error (401). Recording the failure in the request's transaction would undo it every time, and the throttle would never trigger. So `record_failed_login` writes in its own short transaction, which commits even though the request then fails.
+
+### 18.6 Email
+
+`EmailSender` is a protocol with one method, `send(message)`. Phase 1's `ConsoleEmailSender` writes the email, link included, to the log. Tests use an in-memory `FakeEmailSender` and read the token from `outbox.last(email)`. A real sender (SMTP or an email API) can replace it later without touching any route.
+
+### 18.7 Tests
+
+- `tests/unit/test_security.py` (9): Argon2id format and verification, salts, garbage hashes, token randomness and hashing, the common-password check.
+- `tests/integration/test_auth.py` (28): sign-up emails for new and existing addresses, 7 validation cases, cookie attributes, single-use and expired verification links, sign-in (case-insensitive email, identical failures, unverified accounts), the throttle and its window, `/me`, CSRF on sign-out, idle expiry, only hashes stored, and password reset ending every session including another browser's.
+
+Expired links and idle sessions are tested by moving timestamps back in the database (`owner_db` fixture), not by waiting.
+
+A live run against the development database showed the verification email in the log, and `/auth/verify` then `/me` worked with it.
 
 ---
 

@@ -41,6 +41,14 @@ class Settings(BaseSettings):
         "postgresql+psycopg://sourcely_owner:sourcely_owner@127.0.0.1:5434/sourcely"
     )
 
+    # Accounts and sessions
+    # Secure cookies are only sent over HTTPS. Set to false only for plain-HTTP local work.
+    cookie_secure: bool = True
+    session_idle_days: int = Field(14, ge=1)
+    email_backend: Literal["console"] = "console"
+    # Where links in emails point (the future web app).
+    app_base_url: str = "http://localhost:8000"
+
     # Chunking and retrieval
     chunk_size: int = Field(800, ge=50)
     chunk_overlap: int = Field(120, ge=0)

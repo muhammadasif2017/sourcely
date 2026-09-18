@@ -396,3 +396,31 @@ These answers describe the product plan in [`docs/product/`](product/README.md).
 **Q: Tell me about a performance problem you found in your tests.**
 
 > The suite went from 20 seconds to 149. `pytest --durations` showed one test took 130 seconds: it checks `/health` when the database is down by connecting to a closed port, and on Windows the connection attempt was dropped rather than refused, so the driver waited for the OS timeout. A real outage would have hung health checks the same way. I added `connect_timeout=5` to the engine and gave the test a 1-second one.
+
+---
+
+## 14. Phase 1: accounts and sessions (Task 13)
+
+**Q: How do you store passwords?**
+
+> As Argon2id hashes with a random salt, using argon2-cffi's defaults (RFC 9106). Argon2id is slow and memory-hungry on purpose, so someone with a stolen database can test far fewer guesses per second than with SHA-256. Rules apply only when a password is set: 12 to 128 characters and not on a list of common passwords. At sign-in any string is accepted, so changing the rules never locks people out.
+
+**Q: How do you stop attackers learning which emails have accounts?**
+
+> Every path answers the same way. Sign-up always returns the same 202, and an existing owner gets an "already have an account" email instead. Sign-in returns the same 401 for a wrong password and an unknown email. Timing matters too: for an unknown email the code still verifies against a dummy Argon2 hash, and sign-up hashes the password even when it won't store it.
+
+**Q: What is CSRF, and how does this project prevent it?**
+
+> Another site can make your browser send a request to our API, and the browser attaches our session cookie automatically. Two defences: the session cookie is `SameSite=Lax`, and every state-changing request made with a session must also carry an `X-CSRF-Token` header matching a token stored with the session. Our web app can read that token from a non-HttpOnly cookie; another site can't, so it can't forge the header. The comparison uses `secrets.compare_digest` to avoid timing differences.
+
+**Q: Why store only a hash of the session token?**
+
+> If the database leaked, raw tokens would be working logins. With only SHA-256 hashes stored, a leak gives nothing usable. SHA-256 is enough here, unlike for passwords, because the token is 32 random bytes and can't be guessed.
+
+**Q: Tell me about a bug your design avoided with the sign-in throttle.**
+
+> Each request runs in one transaction that rolls back on error, and a failed sign-in is an error. If I'd recorded the failure in that transaction, the rollback would erase it, and the throttle would never fire. So failures are written in their own short transaction. A test makes five wrong attempts and then checks that even the correct password gets 429.
+
+**Q: Why did you change the common-passwords list from what the spec said?**
+
+> The spec said "10,000 common passwords". When I checked, only 10 entries in that list are 12 characters or longer, and our minimum is 12, so it would have blocked almost nothing. I bundled the 1,259 long entries from the NCSC's 100,000 most-used passwords instead, and updated the spec to record why.

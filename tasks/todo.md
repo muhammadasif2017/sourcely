@@ -129,7 +129,7 @@ Source of truth: `SPEC.md`, section "Phase 1". Every task keeps the Definition o
   - Verify: `uv run alembic upgrade head` on the Compose database; health and fixture tests; CI green.
   - Files: `docker-compose.yml`, `docker/postgres/init.sql`, `alembic.ini`, `migrations/`, `app/db/`, `app/core/config.py`, `app/api/deps.py`, `app/api/routes/health.py`, `tests/conftest.py`, `.github/workflows/ci.yml`, `pyproject.toml`
 
-- [ ] **Task 13: Accounts and sessions** (M)
+- [x] **Task 13: Accounts and sessions** (M)
   - Acceptance:
     - Tables `users`, `sessions`, `email_tokens`, `login_attempts`.
     - `POST /auth/signup`, `/auth/verify`, `/auth/login`, `/auth/logout`, `/auth/password-reset`, `/auth/password-reset/confirm` and `GET /me` behave as in the spec, including identical responses for known and unknown emails.
