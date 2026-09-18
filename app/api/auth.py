@@ -1,21 +1,24 @@
-"""Who is calling: resolving the session cookie, the CSRF check, and setting cookies.
+"""Who is calling: the session cookie and CSRF check, cookies, and the per-request `Principal`.
 
-Task 14 adds workspace resolution (`Principal`) and Task 15 API keys on top of this.
+Task 15 adds API keys as a second way to become a `Principal`.
 """
 
 import secrets
+import uuid
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Annotated
 
 from fastapi import Depends, Request, Response, status
+from sqlalchemy.orm import Session
 
 from app.api.deps import DbDep, SettingsDep
 from app.core.config import Settings
 from app.core.errors import AppError
 from app.db.models import AuthSession, User
-from app.services import accounts
+from app.services import accounts, workspaces
 from app.services.accounts import NewSession
+from app.services.workspaces import Action, allowed
 
 SESSION_COOKIE = "sourcely_session"
 CSRF_COOKIE = "sourcely_csrf"
@@ -76,3 +79,68 @@ def clear_session_cookies(response: Response, settings: Settings) -> None:
     """Remove both cookies from the browser."""
     for name in (SESSION_COOKIE, CSRF_COOKIE):
         response.delete_cookie(name, path="/", secure=settings.cookie_secure, samesite="lax")
+
+
+WORKSPACE_HEADER = "X-Workspace-ID"
+WORKSPACE_NOT_FOUND = "Workspace not found"
+
+
+@dataclass(frozen=True)
+class Principal:
+    """Who is calling, in which workspace, with which role. One per request.
+
+    Exactly one of `user_id` (a browser session) and `api_key_id` (Task 15) is set.
+    """
+
+    user_id: uuid.UUID | None
+    api_key_id: uuid.UUID | None
+    workspace_id: uuid.UUID
+    role: str
+
+    def can(self, action: Action) -> bool:
+        """True if this principal's role allows `action`."""
+        return allowed(self.role, action)
+
+
+def require(principal: Principal, action: Action) -> None:
+    """403 unless the principal's role allows `action` in its workspace."""
+    if not principal.can(action):
+        raise AppError(status.HTTP_403_FORBIDDEN, "Your role in this workspace doesn't allow this")
+
+
+def _parse_workspace_id(value: str) -> uuid.UUID:
+    """A workspace id from a header or path. Malformed ids are 404, like unknown ones."""
+    try:
+        return uuid.UUID(value)
+    except ValueError as exc:
+        raise AppError(status.HTTP_404_NOT_FOUND, WORKSPACE_NOT_FOUND) from exc
+
+
+def _membership_principal(db: Session, workspace_id: uuid.UUID, user: User) -> Principal:
+    membership = workspaces.get_membership(db, workspace_id, user.id)
+    if membership is None:
+        # 404, not 403: a non-member mustn't learn that the workspace exists.
+        raise AppError(status.HTTP_404_NOT_FOUND, WORKSPACE_NOT_FOUND)
+    return Principal(
+        user_id=user.id, api_key_id=None, workspace_id=workspace_id, role=membership.role
+    )
+
+
+def get_principal(request: Request, current: SessionDep, db: DbDep) -> Principal:
+    """The caller of a workspace data request: the session plus the `X-Workspace-ID` header.
+
+    401 without a session, 400 without the header, 404 for a workspace the user isn't in.
+    """
+    header = request.headers.get(WORKSPACE_HEADER)
+    if not header:
+        raise AppError(status.HTTP_400_BAD_REQUEST, f"{WORKSPACE_HEADER} header required")
+    return _membership_principal(db, _parse_workspace_id(header), current.user)
+
+
+def get_workspace_member(workspace_id: str, current: SessionDep, db: DbDep) -> Principal:
+    """The caller of a workspace management route, which names the workspace in its path."""
+    return _membership_principal(db, _parse_workspace_id(workspace_id), current.user)
+
+
+PrincipalDep = Annotated[Principal, Depends(get_principal)]
+MemberDep = Annotated[Principal, Depends(get_workspace_member)]

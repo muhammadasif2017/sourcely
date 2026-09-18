@@ -32,8 +32,9 @@ The log is updated at the end of every task.
 17. [Step 16 (Task 11): README and final verification](#step-16-task-11-readme-and-final-verification)
 18. [Step 17 (Task 12): Postgres foundation](#step-17-task-12-postgres-foundation)
 19. [Step 18 (Task 13): Accounts and sessions](#step-18-task-13-accounts-and-sessions)
-20. [How to run everything built so far](#how-to-run-everything-built-so-far)
-21. [Glossary](#glossary)
+20. [Step 19 (Task 14): Workspaces, roles and the Principal](#step-19-task-14-workspaces-roles-and-the-principal)
+21. [How to run everything built so far](#how-to-run-everything-built-so-far)
+22. [Glossary](#glossary)
 
 ---
 
@@ -957,6 +958,82 @@ After 5 failed sign-ins for one email within 15 minutes, further attempts get **
 Expired links and idle sessions are tested by moving timestamps back in the database (`owner_db` fixture), not by waiting.
 
 A live run against the development database showed the verification email in the log, and `/auth/verify` then `/me` worked with it.
+
+---
+
+## Step 19 (Task 14): Workspaces, roles and the Principal
+
+A **workspace** is the unit of isolation: from Task 16 on, every document belongs to exactly one. This task adds workspaces, the roles people have in them, and the object every later request is built on: the `Principal`.
+
+### 19.1 Tables (migration `0003`)
+
+- `workspaces`: id and name (1 to 60 characters).
+- `memberships`: `(workspace_id, user_id)` as the primary key, and `role` checked to be `owner`, `admin`, `editor` or `viewer`. Deleting a workspace or a user cascades to their memberships.
+
+**Exactly one owner, enforced by the database.** A **partial unique index** is an index over only the rows matching a condition:
+
+```sql
+CREATE UNIQUE INDEX uq_memberships_one_owner ON memberships (workspace_id) WHERE role = 'owner';
+```
+
+Among the owner rows, each workspace can appear once. However the application code changes later, the database refuses a second owner. A test inserts one directly and expects an `IntegrityError`.
+
+### 19.2 The role table, in one place
+
+`app/services/workspaces.py` names four **actions** and the least role allowed each:
+
+| Action | Means | Least role |
+|---|---|---|
+| `read` | list documents, search, ask | viewer |
+| `write` | add, replace, delete documents | editor |
+| `manage` | rename; members, invites, API keys | admin |
+| `own` | delete the workspace, transfer ownership | owner |
+
+`allowed(role, action)` compares ranks. It's the only place the rules exist, so routes can't disagree. A unit test checks all 16 role and action pairs against the spec's table.
+
+### 19.3 The Principal
+
+Every data request from Task 16 on starts by answering "who is calling, in which workspace, with which role?". The answer is a small frozen dataclass:
+
+```python
+@dataclass(frozen=True)
+class Principal:
+    user_id: uuid.UUID | None      # a browser session...
+    api_key_id: uuid.UUID | None   # ...or an API key (Task 15)
+    workspace_id: uuid.UUID
+    role: str
+```
+
+Two dependencies build it:
+
+- **`PrincipalDep`** for data routes: the session, plus the workspace named in the **`X-Workspace-ID`** header. A user can belong to several workspaces, so each request must say which one.
+- **`MemberDep`** for management routes, which name the workspace in the path (`/workspaces/{workspace_id}/...`).
+
+Both answer **401** without a session, **404** "Workspace not found" for a workspace the caller doesn't belong to (and for an id that isn't a UUID), and **400** when the header is missing. Routes then call `require(principal, "manage")`, which answers **403**.
+
+**Why 404 and not 403 for a stranger?** A 403 says "this exists, but you can't have it", which confirms the workspace exists. A 404 reveals nothing.
+
+### 19.4 Endpoints
+
+| Endpoint | Who | Result |
+|---|---|---|
+| `POST /workspaces` | any signed-in user | 201; the caller becomes owner |
+| `PATCH /workspaces/{id}` | admin, owner | renamed |
+| `DELETE /workspaces/{id}` | owner, with `confirm_name` | 204; everything in it goes (cascade) |
+| `POST /workspaces/{id}/transfer` | owner | the member becomes owner; the old owner becomes admin |
+| `GET /me` | signed in | now lists workspaces with roles, sorted by name |
+
+**Transfer and the one-owner index.** Promoting the new owner first would, for one moment, mean two owners, and the index would reject it. So the code demotes the old owner, flushes that change to the database, and only then promotes the new one.
+
+**Delete needs the name.** `DELETE` with `{"confirm_name": "Acme Support"}`: a wrong name is 400. It's a guard against deleting the wrong workspace, like the "type the name" box on GitHub.
+
+### 19.5 Testing it
+
+- `sign_in("email")`: a fixture that signs up, reads the token from the fake outbox, verifies, and returns a signed-in client. `csrf(client)` gives the header for writes.
+- Other roles are arranged by inserting `memberships` rows directly, since inviting members is Task 17.
+- A **probe route** is added to the app inside one test file only (`/_principal`), which returns the resolved Principal. That tests the dependency on its own, before any real route uses it.
+
+44 new tests: 18 for the role table and 26 for the API (creation, validation, CSRF, rename per role, 404 for strangers and malformed ids, delete with confirmation and its cascade, transfer and its edge cases, the one-owner index, and the Principal's 401, 400 and 404 cases).
 
 ---
 

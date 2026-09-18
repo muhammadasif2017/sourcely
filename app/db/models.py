@@ -7,7 +7,16 @@ Phase 1 adds tables task by task: accounts (Task 13), workspaces (Task 14), API 
 import uuid
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, LargeBinary, String, func
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    LargeBinary,
+    String,
+    func,
+    text,
+)
 from sqlalchemy.dialects.postgresql import CITEXT
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -70,3 +79,39 @@ class LoginAttempt(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     email: Mapped[str] = mapped_column(CITEXT)
     attempted_at: Mapped[datetime] = _now_column()
+
+
+class Workspace(Base):
+    """The unit of isolation: documents, keys and members all belong to one workspace."""
+
+    __tablename__ = "workspaces"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(60))
+    created_at: Mapped[datetime] = _now_column()
+
+
+class Membership(Base):
+    """A user's role in a workspace: owner, admin, editor or viewer."""
+
+    __tablename__ = "memberships"
+    __table_args__ = (
+        CheckConstraint("role IN ('owner', 'admin', 'editor', 'viewer')", name="role"),
+        # Exactly one owner per workspace, enforced by the database itself: a partial unique
+        # index over the owner rows only.
+        Index(
+            "uq_memberships_one_owner",
+            "workspace_id",
+            unique=True,
+            postgresql_where=text("role = 'owner'"),
+        ),
+    )
+
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), primary_key=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True, index=True
+    )
+    role: Mapped[str] = mapped_column(String(16))
+    created_at: Mapped[datetime] = _now_column()

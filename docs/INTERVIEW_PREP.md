@@ -424,3 +424,23 @@ These answers describe the product plan in [`docs/product/`](product/README.md).
 **Q: Why did you change the common-passwords list from what the spec said?**
 
 > The spec said "10,000 common passwords". When I checked, only 10 entries in that list are 12 characters or longer, and our minimum is 12, so it would have blocked almost nothing. I bundled the 1,259 long entries from the NCSC's 100,000 most-used passwords instead, and updated the spec to record why.
+
+---
+
+## 15. Phase 1: workspaces and roles (Task 14)
+
+**Q: How do you represent "who is calling" in each request?**
+
+> As a `Principal`: a small frozen dataclass with the user or API key, the workspace, and the role. A dependency builds it once per request, from the session plus an `X-Workspace-ID` header, because a user can belong to several workspaces. Routes receive it and pass its `workspace_id` down, so no route reads the workspace from the request body.
+
+**Q: Where do your permission rules live?**
+
+> In one function, `allowed(role, action)`, with four actions (read, write, manage, own) and the least role for each. Routes call `require(principal, "manage")`. Keeping the table in one place means two routes can't disagree, and a table-driven test checks all 16 combinations against the spec.
+
+**Q: How do you guarantee a workspace has exactly one owner?**
+
+> With a partial unique index: unique on `workspace_id`, but only over rows where `role = 'owner'`. The database refuses a second owner, whatever the code does. It also shaped the transfer code: promoting the new owner first would briefly create two owners, so I demote the old owner, flush, then promote.
+
+**Q: Why return 404 instead of 403 for someone else's workspace?**
+
+> 403 means "it exists but you can't have it", which confirms the workspace exists. 404 reveals nothing. A malformed id is also 404 rather than 422, for the same reason and so every "not yours" case looks identical.

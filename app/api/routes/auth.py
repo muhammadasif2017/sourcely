@@ -15,8 +15,9 @@ from app.schemas.auth import (
     SignupRequest,
     UserOut,
     VerifyRequest,
+    WorkspaceSummary,
 )
-from app.services import accounts
+from app.services import accounts, workspaces
 from app.services.email import EmailSender
 
 router = APIRouter(tags=["auth"])
@@ -113,7 +114,12 @@ def password_reset_confirm(body: PasswordResetConfirm, db: DbDep) -> Response:
 
 
 @router.get("/me", response_model=MeResponse)
-def me(current: SessionDep) -> MeResponse:
-    """The signed-in user and the workspaces they belong to."""
-    # Workspaces arrive in Task 14.
-    return MeResponse(user=_user_out(current.user), workspaces=[])
+def me(current: SessionDep, db: DbDep) -> MeResponse:
+    """The signed-in user and the workspaces they belong to, sorted by name."""
+    return MeResponse(
+        user=_user_out(current.user),
+        workspaces=[
+            WorkspaceSummary(id=workspace.id, name=workspace.name, role=role)
+            for workspace, role in workspaces.memberships_of(db, current.user.id)
+        ],
+    )

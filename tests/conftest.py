@@ -3,7 +3,7 @@ import math
 import os
 import re
 import uuid
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 
 import chromadb
 import pytest
@@ -246,3 +246,34 @@ def anon_client(app) -> Iterator[TestClient]:
 def client(app) -> Iterator[TestClient]:
     with TestClient(app) as c:
         yield c
+
+
+TEST_PASSWORD = "violet-anchor-tuesday-42"
+
+
+@pytest.fixture
+def sign_in(app, outbox) -> Iterator[Callable[..., TestClient]]:
+    """Factory: a verified, signed-in TestClient for `email`. Closed after the test."""
+    clients: list[TestClient] = []
+
+    def make(email: str = "owner@example.com", name: str = "Test User") -> TestClient:
+        client = TestClient(app)
+        client.__enter__()
+        clients.append(client)
+        r = client.post(
+            "/auth/signup", json={"name": name, "email": email, "password": TEST_PASSWORD}
+        )
+        assert r.status_code == 202, r.text
+        token = re.search(r"token=([A-Za-z0-9_-]+)", outbox.last(email).body)
+        assert token
+        assert client.post("/auth/verify", json={"token": token.group(1)}).status_code == 200
+        return client
+
+    yield make
+    for client in clients:
+        client.__exit__(None, None, None)
+
+
+def csrf(client: TestClient) -> dict[str, str]:
+    """The CSRF header a browser session must send on every write."""
+    return {"X-CSRF-Token": client.cookies["sourcely_csrf"]}

@@ -138,7 +138,7 @@ Source of truth: `SPEC.md`, section "Phase 1". Every task keeps the Definition o
   - Verify: unit tests for hashing, tokens and the throttle window; API tests for every row in the spec's auth table.
   - Files: `app/core/security.py`, `app/services/accounts.py`, `app/services/email.py`, `app/api/routes/auth.py`, `app/schemas/auth.py`, `migrations/versions/0002_*`, `tests/`
 
-- [ ] **Task 14: Workspaces, roles and the Principal** (M)
+- [x] **Task 14: Workspaces, roles and the Principal** (M)
   - Acceptance:
     - Tables `workspaces` and `memberships`. `POST /workspaces`, `PATCH` and `DELETE /workspaces/{id}` (name confirmation), and `POST /workspaces/{id}/transfer`.
     - `app/api/auth.py` resolves a session plus `X-Workspace-ID` into a `Principal`; `PrincipalDep` and a role check are available to routes. 400 without the header, 404 for a non-member, 403 for a role that's too low.

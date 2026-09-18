@@ -433,6 +433,8 @@ The PoC paths and bodies don't change. Every PoC endpoint except `GET /health` n
 | `GET /workspaces/{workspace_id}/api-keys` | session, admin | none | 200, keys without the secret, with `last_used_at` and `revoked_at` |
 | `DELETE /workspaces/{workspace_id}/api-keys/{key_id}` | session, admin | none | 204. The key stops working immediately. |
 
+**Settled in Task 14.** Workspace names are 1 to 60 characters after trimming. `/me` lists workspaces sorted by name, ignoring case. A malformed workspace id, in the path or the header, is 404 like an unknown one. `POST /workspaces/{id}/transfer` returns `200 {"owner_user_id": ...}`, 400 "You already own this workspace" for the caller themself, and 404 "Member not found" for a non-member. A wrong `confirm_name` on delete is 400 "Type the workspace name exactly to confirm". A role failure is 403 "Your role in this workspace doesn't allow this". The one-owner rule is a partial unique index (`uq_memberships_one_owner`), so the database itself refuses a second owner.
+
 Workspace management endpoints take the workspace from the path, not from `X-Workspace-ID`. A workspace the caller doesn't belong to is always **404**, never 403, so its existence isn't revealed.
 
 `GET /health` stays public. Its `chunks_indexed` becomes the deployment-wide chunk count, and it adds `database: "ok"` or returns 503 `Database unavailable` when the database is unreachable. Database connections time out after 5 seconds, so an outage can't stall requests or health checks.
