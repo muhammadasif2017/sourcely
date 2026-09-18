@@ -6,7 +6,7 @@ Every task also meets the Definition of Done:
 - `uv run ruff check . && uv run ruff format --check .` is clean.
 - Every public function and class has a docstring.
 - No secrets are in tracked files.
-- `docs/BUILD_LOG.md` and `docs/INTERVIEW_PREP.md` are updated for the task.
+- `docs/BUILD_LOG.md` and `docs/INTERVIEW_PREP.md` are updated for the task. Any new dependency or technology also gets an entry in `docs/TECH_STACK.md`.
 
 ## Phase 1: Foundation
 

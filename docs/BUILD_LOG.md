@@ -4,6 +4,7 @@ This log records every step taken to build the RAG API, in order, with the comma
 
 - **What** we are building and the decisions that shape it: [`SPEC.md`](../SPEC.md)
 - **The task order** and progress: [`tasks/plan.md`](../tasks/plan.md), [`tasks/todo.md`](../tasks/todo.md)
+- **Why each technology was chosen** (problem solved, advantages, alternatives, limitations): [`TECH_STACK.md`](TECH_STACK.md)
 - **Interview questions** about this project: [`INTERVIEW_PREP.md`](INTERVIEW_PREP.md)
 
 The log is updated at the end of every task.

@@ -1,6 +1,6 @@
 # Interview Prep: RAG API
 
-These are questions an interviewer is likely to ask about this project, with model answers tied to the actual code. Read [`BUILD_LOG.md`](BUILD_LOG.md) first for the step-by-step build.
+These are questions an interviewer is likely to ask about this project, with model answers tied to the actual code. Read [`BUILD_LOG.md`](BUILD_LOG.md) first for the step-by-step build, and [`TECH_STACK.md`](TECH_STACK.md) for the professional reasons behind every technology choice. Questions such as "Why did you choose X over Y?" are answered there in depth.
 
 Answer in your own words. The goal is to understand *why*, not to memorise. Questions marked **(Task N)** cover parts designed in `SPEC.md` but not built yet. The answers describe the planned design and will be updated once the code exists.
 
