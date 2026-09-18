@@ -6,6 +6,8 @@ from typing import Literal
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.services.embeddings import BGE_QUERY_PREFIX
+
 
 class Settings(BaseSettings):
     """All runtime configuration. Field names map to upper-case env vars (e.g. `CHUNK_SIZE`)."""
@@ -25,6 +27,8 @@ class Settings(BaseSettings):
     # Embeddings and storage
     embedding_model: str = "BAAI/bge-small-en-v1.5"
     embedding_cache_dir: str = "./data/models"
+    # Prepended to queries only. Set to "" for models without a retrieval instruction.
+    embedding_query_prefix: str = BGE_QUERY_PREFIX
     chroma_path: str = "./data/chroma"
     collection_name: str = "documents"
 
@@ -33,7 +37,8 @@ class Settings(BaseSettings):
     chunk_overlap: int = Field(120, ge=0)
     max_document_chars: int = Field(200_000, ge=1)
     default_top_k: int = Field(4, ge=1, le=20)
-    min_relevance: float = Field(0.5, ge=-1.0, le=1.0)
+    # Calibrated at Checkpoint B for bge-small with the query prefix (see SPEC.md).
+    min_relevance: float = Field(0.58, ge=-1.0, le=1.0)
 
     log_level: str = "INFO"
 

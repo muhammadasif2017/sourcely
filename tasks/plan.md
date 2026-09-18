@@ -43,7 +43,7 @@ config ──┬── chunking
 - [x] Task 5: Ask slice, `POST /ask` with Gemini, OpenAI and Claude providers
 
 ### Checkpoint B: live end-to-end check (human review)
-- [ ] Real fastembed model and Gemini: ingest, then search, then ask all work. The "no information" path makes no LLM call. `MIN_RELEVANCE` is calibrated and recorded in `SPEC.md`.
+- [x] Real fastembed model and Gemini: ingest, then search, then ask all work. The "no information" path makes no LLM call. `MIN_RELEVANCE` is calibrated and recorded in `SPEC.md`.
 
 ### Phase 3: Extras
 - [ ] Task 6: `POST /documents/upload`

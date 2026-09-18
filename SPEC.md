@@ -163,12 +163,13 @@ Each response carries an `X-Request-ID` header. The server reuses a client-suppl
 | `LLM_TIMEOUT_SECONDS` | `120` |
 | `EMBEDDING_MODEL` | `BAAI/bge-small-en-v1.5` |
 | `EMBEDDING_CACHE_DIR` | `./data/models`. This is where fastembed stores the downloaded model. |
+| `EMBEDDING_QUERY_PREFIX` | `Represent this sentence for searching relevant passages: ` (bge's retrieval instruction). Added to queries only, never to documents. Set it to empty for a model without an instruction. |
 | `CHROMA_PATH` | `./data/chroma` |
 | `COLLECTION_NAME` | `documents` |
 | `CHUNK_SIZE` / `CHUNK_OVERLAP` | `800` / `120` characters. Overlap must be smaller than size. |
 | `MAX_DOCUMENT_CHARS` | `200000` |
 | `DEFAULT_TOP_K` | `4` |
-| `MIN_RELEVANCE` | Calibrated against real bge-small scores during implementation, then recorded here. |
+| `MIN_RELEVANCE` | `0.58`, calibrated at Checkpoint B (see Open questions) for bge-small with the query prefix. Recalibrate after changing the model or the prefix. |
 | `LOG_LEVEL` | `INFO` |
 
 Invalid configuration, such as overlap ≥ size or an unknown provider, fails at startup with a clear error.
@@ -274,3 +275,5 @@ Auth, PDF and DOCX parsing, pagination for `GET /documents`, range and `$or` fil
 ## Open questions
 
 1. `MIN_RELEVANCE` will be set from measured scores. bge-small often gives unrelated text around 0.4 to 0.5 similarity, so the value needs data. First measurement (Task 4 live check, 3 short documents, 2026-09-18): the right document scored 0.67 to 0.71, unrelated documents 0.40 to 0.63, and an off-topic question's best hit 0.475. The ranges overlap, so the threshold must come from a larger sample at Checkpoint B.
+
+   **Resolved at Checkpoint B (2026-09-19).** Corpus: 6 policy documents, 14 questions they answer and 8 they don't. Top-1 accuracy was 13 of 14 with or without the prefix. Without the prefix, the right document scored 0.609 to 0.824 and unanswerable questions' best hit reached 0.589 (gap 0.020). With bge's query prefix, 0.607 to 0.794 against at most 0.555 (gap 0.052). The owner chose the prefix and `MIN_RELEVANCE = 0.58`, the middle of the gap: all 8 unanswerable questions blocked, all 14 answerable ones kept. The old default of 0.5 let 5 of 8 through. The sample is small; recheck on real pilot documents.

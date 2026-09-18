@@ -23,8 +23,9 @@ The log is updated at the end of every task.
 8. [Step 7: Product planning (after Task 3)](#step-7-product-planning-after-task-3)
 9. [Step 8 (Task 4): Semantic search, `POST /search`](#step-8-task-4-semantic-search-post-search)
 10. [Step 9 (Task 5): Answering questions, `POST /ask`](#step-9-task-5-answering-questions-post-ask)
-11. [How to run everything built so far](#how-to-run-everything-built-so-far)
-12. [Glossary](#glossary)
+11. [Step 10: Checkpoint B, live check and calibration](#step-10-checkpoint-b-live-check-and-calibration)
+12. [How to run everything built so far](#how-to-run-everything-built-so-far)
+13. [Glossary](#glossary)
 
 ---
 
@@ -526,6 +527,55 @@ The route returns 503 before any retrieval when the key is missing. The alternat
 ### 9.6 Live check: the configuration caught a real problem
 
 The first live `/ask` returned **502**. The test suite couldn't catch this, because it's configuration: `.env` held an OpenAI key (`sk-proj-…`) next to the Gemini base URL. Gemini answered **400 "Please pass a valid API key"**. Gemini reports a bad key as 400, not 401, and our mapping turned it into a 502 with a safe message, as designed. The off-topic question in the same run returned the fixed answer in 39 ms with no LLM call. The full live check waits for a valid key at Checkpoint B.
+
+---
+
+## Step 10: Checkpoint B, live check and calibration
+
+A checkpoint is where the owner reviews real behaviour before more features are built on top. This one checks the whole RAG loop against the real embedding model and the real LLM, and sets the one number that can't be guessed: `MIN_RELEVANCE`.
+
+### 10.1 A configuration trap: environment variables beat `.env`
+
+After the Gemini key was added to `.env`, the app still sent the old OpenAI key. The cause: a Windows user-level environment variable `OPENAI_API_KEY`. pydantic-settings reads real environment variables **before** the `.env` file, so the variable silently won. That order is deliberate, and it's the twelve-factor convention: in Docker or production, configuration comes from the environment, and a stray file shouldn't override it. The fix belongs to the machine, not the code. Until the variable is removed, live checks run with `env -u OPENAI_API_KEY`.
+
+Also learned: newer Google AI Studio keys start with `AQ.`, not only `AIza`.
+
+### 10.2 Live end-to-end check
+
+With the real `bge-small-en-v1.5` model and Gemini `gemini-3.5-flash-lite`:
+
+| Question | Answer | Sources | Time |
+|---|---|---|---|
+| How long is parental leave for partners? | "Partners are entitled to 4 weeks of paid parental leave [1]." | leave 0.826 | 4.9 s |
+| Can I get a refund on a monthly plan? | "No, monthly plans are not refundable [1]." | refunds 0.810 | 1.0 s |
+| What is the capital of France? | Fixed "not enough information" answer, no LLM call | none | 0.1 s |
+
+The first LLM call is slower because it opens the connection. A restart with the same `CHROMA_PATH` kept both chunks, and search still found the right document, so persistence works.
+
+### 10.3 Calibrating `MIN_RELEVANCE`
+
+A threshold separates "relevant enough to answer from" from "don't answer". It must come from measurements on the actual model, because small embedding models give unrelated text surprisingly high similarity.
+
+The corpus was 6 short policy documents (leave, refunds, VPN, expenses, security, onboarding), 14 questions they answer (worded differently from the documents, like "vacation days" for "annual leave"), and 8 they don't (general knowledge, and plausible company questions with no document). Only embeddings were used, so it cost nothing.
+
+| | Right document's score | Unanswerable questions' best score | Gap |
+|---|---|---|---|
+| Plain query | 0.609 to 0.824 | up to 0.589 | 0.020 |
+| With bge's query prefix | 0.607 to 0.794 | up to 0.555 | **0.052** |
+
+Both put the right document first for 13 of 14 questions.
+
+**The query prefix.** BAAI trained bge with the instruction "Represent this sentence for searching relevant passages: " in front of queries. We had verified in Task 1 that fastembed does *not* add it. Measured here, adding it lowers all scores a little, but it lowers unrelated ones more, so the gap grows 2.6 times. The plan said to adopt it only if it measurably helped, and it did. It's added to **queries only**: documents are embedded as they are.
+
+**The threshold.** `0.58` is the middle of the prefixed gap (0.555 to 0.607). It blocked all 8 unanswerable questions and kept all 14 answerable ones. The old placeholder of 0.5 would have sent 5 of the 8 unanswerable questions to the LLM. Choosing the middle of the gap leaves room for error on both sides.
+
+**The limit of this evidence.** 22 questions on 6 short documents is a small sample. The threshold should be rechecked on real documents, and it must be recalibrated whenever the embedding model or the prefix changes, because both shift every score.
+
+### 10.4 Code changes
+
+- `FastEmbedEmbedder(model, cache_dir, query_prefix)` prepends the prefix in `embed_query` only. Three unit tests use a fake fastembed model to prove the prefix reaches queries and never documents.
+- New setting `EMBEDDING_QUERY_PREFIX`, defaulting to bge's instruction. `MIN_RELEVANCE` now defaults to `0.58`.
+- Re-checked through the real app: "Do part-time workers get holiday?" scored 0.713 and got a cited answer; "Can I bring my dog to work?" got the fixed answer without an LLM call.
 
 ---
 

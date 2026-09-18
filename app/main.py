@@ -38,7 +38,9 @@ def create_app(
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.settings = settings
         app.state.embedder = embedder or FastEmbedEmbedder(
-            settings.embedding_model, settings.embedding_cache_dir
+            settings.embedding_model,
+            settings.embedding_cache_dir,
+            settings.embedding_query_prefix,
         )
         app.state.store = store or VectorStore(
             chromadb.PersistentClient(path=settings.chroma_path), settings.collection_name

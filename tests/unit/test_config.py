@@ -10,7 +10,14 @@ def make(**overrides) -> Settings:
 
 
 def test_defaults_match_spec(monkeypatch):
-    for name in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_BASE_URL", "LLM_PROVIDER"):
+    for name in (
+        "OPENAI_API_KEY",
+        "ANTHROPIC_API_KEY",
+        "OPENAI_BASE_URL",
+        "LLM_PROVIDER",
+        "MIN_RELEVANCE",
+        "EMBEDDING_QUERY_PREFIX",
+    ):
         monkeypatch.delenv(name, raising=False)
     s = make()
     assert s.llm_provider == "openai"
@@ -20,6 +27,8 @@ def test_defaults_match_spec(monkeypatch):
     assert (s.chunk_size, s.chunk_overlap) == (800, 120)
     assert s.default_top_k == 4
     assert s.max_document_chars == 200_000
+    assert s.min_relevance == 0.58
+    assert s.embedding_query_prefix.startswith("Represent this sentence")
 
 
 def test_overlap_must_be_smaller_than_size():

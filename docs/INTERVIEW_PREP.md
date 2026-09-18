@@ -83,7 +83,7 @@ Answer in your own words. The goal is to understand *why*, not to memorise. Ques
 
 **Q: Do queries and documents get embedded the same way?**
 
-> It depends on the model. Some models (E5, and older bge versions) expect a prefix on queries, such as bge's "Represent this sentence for searching relevant passages:". For bge-small-en-v1.5, BAAI made that instruction optional. We use fastembed's `query_embed()` for queries, and we verified that for this model it produces exactly the same vector as `embed()`: it adds no prefix. Whether adding the instruction manually improves our retrieval is something to *measure* on real data, not assume. That's done at the calibration checkpoint.
+> It depends on the model. Some models (E5, and older bge versions) expect a prefix on queries, such as bge's "Represent this sentence for searching relevant passages:". For bge-small-en-v1.5, BAAI made that instruction optional. We use fastembed's `query_embed()` for queries, and we verified that for this model it produces exactly the same vector as `embed()`: it adds no prefix. Whether adding the instruction manually improves our retrieval was something to *measure*, not assume. At the calibration checkpoint it widened the gap between relevant and unrelated scores from 0.020 to 0.052, so we now add it to queries only, never to documents.
 >
 > A good follow-up point for interviews: "I initially assumed `query_embed` added the prefix, tested it, and found it didn't. So I check library behaviour empirically rather than trusting documentation or memory."
 
@@ -130,6 +130,14 @@ Answer in your own words. The goal is to understand *why*, not to memorise. Ques
 **Q: Why is there a `MIN_RELEVANCE` threshold?**
 
 > Nearest neighbours are always returned, even when nothing is actually relevant. Without a threshold, an off-topic question still gets "context", and the LLM may produce a confident wrong answer. The threshold lets us say "not enough information" and skip the LLM call. The value is calibrated from measured scores, because small embedding models give unrelated text fairly high similarity.
+
+**Q: How did you choose 0.58?**
+
+> With a small labelled set: 6 documents, 14 questions they answer and 8 they don't. With bge's query prefix, the right document scored at least 0.607, and the best hit for an unanswerable question at most 0.555. 0.58 sits in the middle of that gap, so all 14 were kept and all 8 blocked. The old guess of 0.5 would have let 5 of the 8 through. I'd say plainly that 22 questions is a small sample, that it needs rechecking on real documents, and that changing the model or the prefix means recalibrating, because both shift every score.
+
+**Q: Your `.env` had the right key, but the app used the wrong one. Why?**
+
+> A user-level environment variable with the same name. pydantic-settings, like most twelve-factor tools, lets real environment variables override the `.env` file, so the old key silently won. The code was right; the machine was misconfigured. Checking the key's prefix without printing it found the cause quickly.
 
 ---
 
