@@ -214,6 +214,9 @@ tests/
 .github/workflows/ci.yml  ruff, mypy and pytest on push and PR
 .pre-commit-config.yaml   Hygiene hooks plus ruff and mypy
 Dockerfile, docker-compose.yml, .dockerignore
+docs/
+  BUILD_LOG.md          Step-by-step build record with the concept behind each step (for learning)
+  INTERVIEW_PREP.md     Likely interview questions with answers tied to this code
 .env.example, README.md, SPEC.md, tasks/, pyproject.toml, uv.lock, .python-version
 ```
 
