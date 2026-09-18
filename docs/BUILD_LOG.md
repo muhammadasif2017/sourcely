@@ -20,8 +20,9 @@ The log is updated at the end of every task.
 5. [Step 4 (Task 1): Skeleton, settings, health check and tooling](#step-4-task-1-skeleton-settings-health-check-and-tooling)
 6. [Step 5 (Task 2): Chunking](#step-5-task-2-chunking)
 7. [Step 6 (Task 3): Ingesting documents, `POST /documents`](#step-6-task-3-ingesting-documents-post-documents)
-8. [How to run everything built so far](#how-to-run-everything-built-so-far)
-9. [Glossary](#glossary)
+8. [Step 7: Product planning (after Task 3)](#step-7-product-planning-after-task-3)
+9. [How to run everything built so far](#how-to-run-everything-built-so-far)
+10. [Glossary](#glossary)
 
 ---
 
@@ -373,6 +374,32 @@ The route embeds *before* calling the store. If embedding fails, the old version
 ### 6.4 Tests (`tests/integration/test_documents.py`)
 
 Written first (red), then the code (green). They cover the 201 body, the stored ids and metadata, the generated id, re-ingest with a shorter version (asserting the old last chunk id is gone, not just that the count dropped), other documents being untouched, the 413 limit and the exact boundary, and a parametrized list of 19 invalid payloads that must each return 422 and store nothing. The 422 tests assert only the status code, because the body of FastAPI's validation error is an implementation detail.
+
+---
+
+## Step 7: Product planning (after Task 3)
+
+Before continuing with Task 4, we stepped back and planned what Sourcely becomes as a **product**, not just a PoC API. No code changed. The result is a set of documents in [`docs/product/`](product/README.md):
+
+| Document | What it is | Why teams write it |
+|---|---|---|
+| [PRD](product/PRD.md) | Product requirements: problem, users, goals, features, phases, metrics, risks | Agrees *what* to build and *why* before anyone spends time on *how*. |
+| [Wireframes](product/WIREFRAMES.md) | Low-fidelity screen layouts, including empty and error states | Cheap to change. Finds missing states before they become bugs. |
+| [Interaction flows](product/INTERACTION_FLOWS.md) | How a user moves between screens to finish a job | Shows every decision point and dead end in a journey. |
+| [Feature validation](product/FEATURE_VALIDATION.md) | Acceptance criteria, input rules, metrics, and assumptions to test first | Makes "done" testable, and checks the feature is worth building at all. |
+| [Architecture](product/ARCHITECTURE.md) | Current and target system, data model, API surface, key decisions | Lets you reason about the whole system and its tradeoffs in one place. |
+| [Flow diagrams](product/FLOW_DIAGRAMS.md) | Sequence diagrams and state machines for each operation | Shows the order of calls and where each error branches off. |
+
+### Concepts worth knowing
+
+- **Built, Specced, Proposed.** Every item in those documents carries one of these labels. A plan that mixes what exists with what's imagined, without saying which is which, misleads its readers.
+- **Multi-tenancy.** One deployment serves many isolated customers (here, *workspaces*). The safest designs enforce isolation in more than one layer: the request, the code, and the database (PostgreSQL row-level security).
+- **Background jobs.** Slow work (PDF extraction, embedding a large file) runs in a separate worker process, so the API answers quickly with `202 Accepted` and the client checks the status later.
+- **Assumption testing.** Each risky belief (for example "users click citations") gets a cheap test *before* the feature is built. A failed test changes the plan, which is much cheaper than changing shipped code.
+
+### What this does not change
+
+`SPEC.md` is still the source of truth, and Task 4 is still next. The product documents are a proposal. Several ideas (auth, new endpoints, moving from Chroma to pgvector) are on the "ask first" list in `CLAUDE.md`, so each needs the owner's decision and a `SPEC.md` amendment before any code.
 
 ---
 

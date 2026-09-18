@@ -262,3 +262,29 @@ Answer in your own words. The goal is to understand *why*, not to memorise. Ques
 **Q: Any data-privacy concern with your setup?**
 
 > Yes. On Gemini's free tier, Google may use prompts and responses to improve its products. So no confidential documents should be ingested while using a free-tier key. It's documented in `.env.example` and the README. Local Ollama avoids the issue entirely.
+
+---
+
+## 12. Product thinking (planned in `docs/product/`)
+
+These answers describe the product plan in [`docs/product/`](product/README.md). None of it is built yet, so say "planned" when you talk about it.
+
+**Q: Who is the user, and how did that change from the PoC?**
+
+> The PoC served developers calling an HTTP API. The product makes the *asker* the primary user: a non-technical team member who needs an answer they can trust and show to others. That shifted priorities toward citations you can click, an honest "I couldn't find this", and a web app, with the API kept for integrators.
+
+**Q: How would you make Sourcely multi-tenant?**
+
+> Each customer gets a *workspace*, and every row, every vector and every API key belongs to one. Isolation is enforced in three layers: the auth step resolves exactly one workspace per request, every repository function requires a `workspace_id` argument, and PostgreSQL row-level security rejects any row from another workspace even if the code forgets. A test calls every route with another workspace's credential and expects 404. I return 404 rather than 403, so the other workspace's data isn't even confirmed to exist.
+
+**Q: Why move from Chroma to pgvector?**
+
+> Once ingestion runs in a separate worker process, two processes would share an embedded Chroma database, which it doesn't support safely. The options were Chroma server mode or pgvector. pgvector wins because we were adding Postgres anyway for users and workspaces: one database to back up, and deleting a document removes its rows and its vectors in one transaction, so there's no window where vectors outlive their document. The `VectorStore` interface stays the same, so routes don't change. Before switching, I'd measure recall against Chroma on a test set.
+
+**Q: Why is PDF upload asynchronous?**
+
+> Extracting and embedding a large PDF takes seconds to minutes. Doing that inside the request would hold an API thread and risk timeouts. So the upload saves the file, creates a version with status `queued` and a job row in one transaction, and returns `202 Accepted`. A worker picks jobs with `SELECT ... FOR UPDATE SKIP LOCKED`, which lets several workers run without taking the same job, and no Redis is needed. A replace only goes live when the new version is ready, so a failed replace never leaves the document empty.
+
+**Q: How do you decide whether a feature is worth building?**
+
+> Each feature has a success metric and a signal that would make us change it. The risky assumptions get a cheap test first. For example, whether users actually click citations is tested with a clickable prototype and 5 people before the real UI is built.
