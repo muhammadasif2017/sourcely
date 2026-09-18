@@ -28,8 +28,9 @@ The log is updated at the end of every task.
 13. [Step 12 (Task 7): Listing and deleting documents](#step-12-task-7-listing-and-deleting-documents)
 14. [Step 13 (Task 8): Filters on `/search` and `/ask`](#step-13-task-8-filters-on-search-and-ask)
 15. [Step 14 (Task 9): Streaming answers, `POST /ask/stream`](#step-14-task-9-streaming-answers-post-askstream)
-16. [How to run everything built so far](#how-to-run-everything-built-so-far)
-17. [Glossary](#glossary)
+16. [Step 15 (Task 10): Docker, and a request size limit](#step-15-task-10-docker-and-a-request-size-limit)
+17. [How to run everything built so far](#how-to-run-everything-built-so-far)
+18. [Glossary](#glossary)
 
 ---
 
@@ -773,6 +774,56 @@ A real `uvicorn` server with Gemini, read with `curl -N`. The `sources` event ca
 
 ---
 
+## Step 15 (Task 10): Docker, and a request size limit
+
+The whole service now starts with one command, `docker compose up --build`. This task also closed the gap found in Task 6: the size of a request body is now limited before the server stores it.
+
+### 15.1 The request size limit (`RequestSizeLimitMiddleware`)
+
+Task 6 noted that Starlette writes an upload to a temporary file *before* any route runs, so a route can't stop a huge upload from being received. The fix belongs in front of the routes, so it's another raw ASGI middleware in `app/api/middleware.py`:
+
+1. If the request declares `Content-Length` and it's larger than `MAX_REQUEST_BYTES`, reply **413** at once, without reading a byte of the body. A non-numeric `Content-Length` gets **400**.
+2. A *chunked* request (`Transfer-Encoding: chunked`) has no declared length. The middleware wraps `receive` and counts bytes as they arrive. Past the limit, it raises an exception to stop reading.
+
+One detail took a test to find: FastAPI catches any exception raised while reading a JSON body and answers **400** "There was an error parsing the body". So the middleware also wraps `send`. Once the limit is exceeded, it swallows whatever the app tries to send and sends its own 413 instead.
+
+**Why a middleware and not a reverse proxy?** A proxy (Caddy, nginx) could enforce the same limit, but it would be one more container to run, and the app would be unprotected whenever it runs without the proxy (locally, in tests). The middleware works everywhere and has tests. A production proxy can add its own limit as a second layer.
+
+**The default is 2 MiB.** A maximum-size document is 200,000 characters. In the worst case, JSON escapes every character as a 6-byte `\uXXXX`, which is 1.2 MB. A test checks that the default always leaves room for that, so the two limits can't contradict each other.
+
+Middleware order matters. Starlette runs the **last added** middleware **first**. The size limit is added before `RequestContextMiddleware`, so the request-id middleware wraps it, and 413 responses still carry an `X-Request-ID` and an access-log line.
+
+### 15.2 The Dockerfile
+
+```
+build stage:   python:3.12-slim + uv 0.9.22  ->  uv sync --frozen --no-dev --no-install-project  ->  /app/.venv
+runtime stage: python:3.12-slim  +  /app/.venv  +  app/   ->  user sourcely, port 8000, health check
+```
+
+- **Multi-stage build.** The first stage installs dependencies; the second copies only the result. uv, its download cache and build files never reach the final image.
+- **Layer caching.** Docker caches each step. `pyproject.toml` and `uv.lock` are copied and installed *before* `app/`, so editing code doesn't reinstall every package.
+- **`--frozen`** installs exactly what `uv.lock` says and fails if the lock is out of date. **`--no-dev`** leaves out pytest, ruff and mypy.
+- **Non-root.** The container runs as `sourcely` (uid 10001), which owns only `/app/data`. If the app were compromised, the attacker couldn't change the installed code.
+- **Health check.** Docker calls `/health` every 30 seconds, using Python's `urllib` because the slim image has no `curl`. The 120-second start period covers the first model download.
+- **`.dockerignore`** keeps `.env`, `.venv/`, `data/`, `.git/`, tests and docs out of the build context. The key point is that **`.env` never enters the image**: configuration arrives at run time instead.
+
+### 15.3 docker-compose.yml
+
+- `env_file: .env` with `required: false`: configuration is read at run time, and the API still starts without it (`/ask` then returns 503).
+- `CHROMA_PATH` and `EMBEDDING_CACHE_DIR` are fixed to the container paths, so a local `.env` with host paths can't break them.
+- Named volumes `chroma-data` and `model-cache` survive `docker compose down`, restarts and rebuilds. `docker compose down -v` deletes them.
+
+### 15.4 A bug only the container showed
+
+The first container failed to start with `Permission denied (os error 13)` while downloading the embedding model. The Hugging Face download library keeps its own cache in the user's **home directory**, and the `sourcely` user was created without one. The fix sets `HF_HOME=/app/data/models/.huggingface`, inside the writable model volume. The tests could never have caught this, because they don't download models or run as a restricted user.
+
+### 15.5 Verification
+
+- `tests/integration/test_request_limit.py` (8 tests): a body exactly at the limit is accepted; a declared length over it gets 413 with a request id and nothing stored; chunked bodies over and under the limit; an oversized upload; an invalid `Content-Length` (400); GET requests unaffected; and the default fits the largest valid document.
+- In Docker: healthy about 30 seconds after start; `/health` 200; ingest 201; search found the right document (0.656); a live `/ask` through Gemini answered "No, monthly plans are not refundable [1]."; a 2.2 MB upload got 413; the process runs as `sourcely`; after `docker compose restart`, `chunks_indexed` was still 1 and the model wasn't downloaded again.
+
+---
+
 ## How to run everything built so far
 
 ```bash
@@ -786,6 +837,13 @@ uv run mypy                                                # types
 ```
 
 `--reload` restarts the server when you save a file. Use it in development only.
+
+Or, with Docker only (no local Python needed):
+
+```bash
+docker compose up --build        # http://localhost:8000/docs ; Ctrl+C or `docker compose down` to stop
+docker compose down -v           # also delete the stored documents and the model cache
+```
 
 ---
 

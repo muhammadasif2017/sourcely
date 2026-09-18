@@ -299,9 +299,21 @@ Answer in your own words. The goal is to understand *why*, not to memorise. Ques
 
 > It's fast, and it manages the Python version, the virtualenv, dependencies and a lockfile in one tool. `uv.lock` makes installs reproducible, so CI and Docker get exactly the versions tested locally.
 
-**Q: How would you deploy this?** (Task 10)
+**Q: How would you deploy this?**
 
-> A Docker image based on `python:3.12-slim`, dependencies installed from `uv.lock` without dev tools, running as a non-root user, with a healthcheck on `/health`. Volumes persist `data/` (Chroma and the model cache). Configuration comes from environment variables. For production: multiple replicas need a shared vector store (Chroma server mode or Qdrant) instead of the embedded one.
+> With the Docker image: a two-stage build on `python:3.12-slim`, dependencies installed from `uv.lock` with `--frozen --no-dev`, running as a non-root user, with a health check on `/health`. Named volumes keep the Chroma index and the model cache. Configuration comes from environment variables at run time; `.env` is excluded from the image by `.dockerignore`. For production I'd add a TLS reverse proxy, and several replicas would need a shared vector store (Chroma server mode, pgvector or Qdrant) instead of the embedded one.
+
+**Q: Why a multi-stage Docker build?**
+
+> The build stage has uv and its cache; the runtime stage copies only the finished virtual environment and the code. The final image is smaller and has fewer tools an attacker could use. Copying `pyproject.toml` and `uv.lock` before the code also means a code change reuses the cached dependency layer.
+
+**Q: Tell me about a bug that only appeared in Docker.**
+
+> The container failed on first start with `Permission denied` while downloading the embedding model. The Hugging Face downloader writes a cache in the user's home directory, and my non-root user had none. Setting `HF_HOME` to a path in the writable model volume fixed it. Tests couldn't catch it, because they never download models or run as a restricted user, which is why the plan has a manual Docker check.
+
+**Q: How do you stop a huge upload from filling the disk?**
+
+> A raw ASGI middleware checks `Content-Length` before reading anything and answers 413 above `MAX_REQUEST_BYTES` (2 MiB). Chunked bodies have no declared length, so it counts bytes as they arrive and stops past the limit. FastAPI turns a failed body read into a 400, so the middleware also replaces that response with the 413. It runs inside the request-id middleware, so even rejected requests are traceable.
 
 ---
 

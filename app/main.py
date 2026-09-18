@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 import chromadb
 from fastapi import FastAPI
 
-from app.api.middleware import RequestContextMiddleware
+from app.api.middleware import RequestContextMiddleware, RequestSizeLimitMiddleware
 from app.api.routes import ask, documents, health, search
 from app.core.config import Settings, get_settings
 from app.core.errors import register_exception_handlers
@@ -62,6 +62,8 @@ def create_app(
         summary="Ingest text, search it semantically and answer questions from it with an LLM.",
         lifespan=lifespan,
     )
+    # The last middleware added runs first, so the request id also covers 413 responses.
+    app.add_middleware(RequestSizeLimitMiddleware, max_bytes=settings.max_request_bytes)
     app.add_middleware(RequestContextMiddleware)
     register_exception_handlers(app)
     app.include_router(health.router)

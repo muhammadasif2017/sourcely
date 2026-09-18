@@ -416,6 +416,24 @@ It has already caught a real issue: a function declared to return `list[float]` 
 
 ---
 
+## 19b. Docker and Compose (Task 10)
+
+**What it is.** Docker packages the app, its Python and its libraries into an *image* that runs the same way on any machine. Compose describes how to run it: ports, configuration and storage volumes.
+
+**Why chosen.** One command (`docker compose up --build`) replaces installing Python 3.12, uv and the dependencies, and it's what most hosting platforms run.
+
+**Where used.** `Dockerfile`, `docker-compose.yml` and `.dockerignore`.
+
+- **Two stages.** The build stage copies uv from its official image (pinned to 0.9.22) and runs `uv sync --frozen --no-dev --no-install-project` with a cache mount. The runtime stage copies only the virtual environment and `app/`, so uv and its cache aren't in the final image.
+- **Dependencies before code.** `pyproject.toml` and `uv.lock` are copied and installed before `app/`, so editing code reuses the cached dependency layer.
+- **Non-root user** `sourcely` (uid 10001). It owns only `/app/data`.
+- **Named volumes** `chroma-data` and `model-cache`, so the index and the 65 MB embedding model survive restarts and rebuilds.
+- **Health check** in Python's standard library, because the slim image has no curl, with a 120-second start period for the first model download.
+
+**Limitations.** The image is about 840 MB, mostly onnxruntime and chromadb. Embedded Chroma still means one container: several replicas would need a shared vector store. There's no TLS; a reverse proxy would provide it in production.
+
+---
+
 ## 20. Server-Sent Events (Task 9)
 
 **What it is.** A standard (`text/event-stream`) for a server to push a stream of events over a normal HTTP response.

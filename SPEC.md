@@ -152,6 +152,8 @@ Each response carries an `X-Request-ID` header. The server reuses a client-suppl
 | Request fails validation | 422 |
 | `DELETE` of an unknown document | 404 |
 | Document longer than `MAX_DOCUMENT_CHARS` | 413 |
+| Request body larger than `MAX_REQUEST_BYTES`, declared or counted while streaming in | 413 `Request body is larger than N bytes`, before the body is read |
+| `Content-Length` header that isn't a number | 400 |
 | Upload has the wrong file type | 415 |
 | `/ask` called when the LLM API key is missing | 503 "LLM provider not configured" |
 | LLM provider rejects the call (auth, bad request, refusal) | 502 |
@@ -180,6 +182,7 @@ Each response carries an `X-Request-ID` header. The server reuses a client-suppl
 | `COLLECTION_NAME` | `documents` |
 | `CHUNK_SIZE` / `CHUNK_OVERLAP` | `800` / `120` characters. Overlap must be smaller than size. |
 | `MAX_DOCUMENT_CHARS` | `200000` |
+| `MAX_REQUEST_BYTES` | `2097152` (2 MiB). The largest body the server reads. It admits a maximum-size document even with every character JSON-escaped (6 bytes each). |
 | `DEFAULT_TOP_K` | `4` |
 | `MIN_RELEVANCE` | `0.58`, calibrated at Checkpoint B (see Open questions) for bge-small with the query prefix. Recalibrate after changing the model or the prefix. |
 | `LOG_LEVEL` | `INFO` |

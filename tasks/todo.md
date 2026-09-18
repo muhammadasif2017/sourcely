@@ -98,7 +98,7 @@ Every task also meets the Definition of Done:
 
 ## Phase 4: Ship
 
-- [ ] **Task 10: Docker** (S)
+- [x] **Task 10: Docker** (S)
   - Acceptance:
     - `docker compose up --build` serves a healthy API that reads `.env`.
     - Volumes keep `data/` and the model cache across restarts. The container runs as a non-root user and has a healthcheck.

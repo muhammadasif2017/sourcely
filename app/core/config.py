@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     chunk_size: int = Field(800, ge=50)
     chunk_overlap: int = Field(120, ge=0)
     max_document_chars: int = Field(200_000, ge=1)
+    # Whole request body. 2 MiB admits a maximum-size document even when every character is
+    # JSON-escaped as a 6-byte \u escape, plus room for the rest of the body.
+    max_request_bytes: int = Field(2 * 1024 * 1024, ge=1024)
     default_top_k: int = Field(4, ge=1, le=20)
     # Calibrated at Checkpoint B for bge-small with the query prefix (see SPEC.md).
     min_relevance: float = Field(0.58, ge=-1.0, le=1.0)

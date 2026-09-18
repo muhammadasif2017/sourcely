@@ -1,0 +1,27 @@
+# Run the whole service with: docker compose up --build
+# Configuration comes from .env (copy .env.example first). Data and the embedding model
+# live in named volumes, so they survive container restarts and rebuilds.
+
+services:
+  api:
+    build: .
+    image: sourcely:latest
+    ports:
+      - "8000:8000"
+    env_file:
+      - path: .env
+        # The API still starts without .env: /documents and /search work, /ask returns 503.
+        required: false
+    environment:
+      # Inside the container these paths are fixed by the image and backed by the volumes
+      # below, whatever a local .env says.
+      CHROMA_PATH: /app/data/chroma
+      EMBEDDING_CACHE_DIR: /app/data/models
+    volumes:
+      - chroma-data:/app/data/chroma
+      - model-cache:/app/data/models
+    restart: unless-stopped
+
+volumes:
+  chroma-data:
+  model-cache:

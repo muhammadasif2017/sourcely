@@ -16,6 +16,7 @@ uv run pytest -q                                         # tests (no network, no
 uv run ruff check . && uv run ruff format --check .      # lint and format
 uv run mypy                                              # strict type check of app/
 uv run pre-commit run --all-files                        # every hook, the same checks as CI
+docker compose up --build                                # the API in a container, on port 8000
 ```
 
 **Always use `--factory`.** There is intentionally no module-level `app` in `app/main.py`, so importing it never reads `.env` or loads models. `uvicorn app.main:app` will fail.
@@ -82,6 +83,8 @@ def search(body: SearchRequest, embedder: EmbedderDep, store: StoreDep) -> Searc
 - **OS environment variables override `.env`** (pydantic-settings precedence). On 2026-09-19 a user-level `OPENAI_API_KEY` (an OpenAI key) was silently replacing the Gemini key from `.env`. It was renamed to `OPENAI_API_KEY_OPENAI`, so new terminals no longer set `OPENAI_API_KEY`. A shell started before that still has the old value: restart it, or use `env -u OPENAI_API_KEY uv run ...`. Tests are unaffected: they build `Settings(_env_file=None, ...)` with explicit values.
 - **Anthropic content blocks:** narrow with `isinstance(block, BetaTextBlock)`, not `block.type == "text"`. The content union has 17 members and mypy strict can't narrow it by the `type` string.
 - **pre-commit excludes `uv.lock` from `check-added-large-files`.** Lockfiles belong in git.
+- **Docker: the container user has no home directory, so `HF_HOME` must point somewhere writable.** Without it the model download fails with `Permission denied (os error 13)`: Hugging Face's xet downloader writes a cache under `~`. The Dockerfile sets `HF_HOME=/app/data/models/.huggingface`, inside the model volume.
+- **`RequestSizeLimitMiddleware` must run inside `RequestContextMiddleware`** (added before it, since the last middleware added runs first), so 413 responses still get an `X-Request-ID`. FastAPI turns an exception raised while reading the body into its own 400; the middleware replaces that response with 413.
 - **Chroma `collection.query(n_results=0)` raises `TypeError`.** An empty collection with `n_results >= 1` returns `[[]]`, and `n_results` above the count returns what exists. `VectorStore.query` relies on this; `top_k` is validated to be at least 1.
 - **ruff 0.16 also formats Python code blocks inside Markdown.** `[tool.ruff.format] exclude = ["*.md"]` keeps doc snippets (aligned comments, `...` bodies) as written, so `ruff format --check .` in CI checks only source.
 - **`TestClient(app, raise_server_exceptions=False)`** is needed to assert on the generic 500 response.

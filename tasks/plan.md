@@ -55,7 +55,7 @@ config ──┬── chunking
 - [x] All tests pass. A live `curl -N` stream on Gemini shows tokens arriving progressively. Delete removes the document from list and search.
 
 ### Phase 4: Ship
-- [ ] Task 10: Docker
+- [x] Task 10: Docker
 - [ ] Task 11: README and final verification against the spec's success criteria
 
 ### Checkpoint D: complete

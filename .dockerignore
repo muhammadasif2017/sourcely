@@ -1,0 +1,22 @@
+# Keep the build context small and free of secrets and local state.
+# The image needs only pyproject.toml, uv.lock and app/.
+
+.env
+.venv/
+data/
+.git/
+.github/
+.serena/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+**/__pycache__/
+*.py[oc]
+tests/
+docs/
+tasks/
+*.md
+Dockerfile
+docker-compose.yml
+.dockerignore
+.pre-commit-config.yaml
