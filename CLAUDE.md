@@ -40,7 +40,7 @@ tests/unit/, tests/integration/
 
 - **Layering:** routes stay thin. They validate, call a service and return a schema. Logic lives in `app/services/`.
 - **Route handlers are plain `def`, not `async def`.** fastembed, Chroma and the SDK clients as used here are blocking. FastAPI runs `def` handlers in its threadpool.
-- **Components reach routes only through `app/api/deps.py`:** `SettingsDep`, `EmbedderDep`, `StoreDep`, and `LLMDep` once Task 5 lands. Never read `app.state` in a route directly.
+- **Components reach routes only through `app/api/deps.py`:** `SettingsDep`, `EmbedderDep`, `StoreDep`, and `LLMDep` once Task 5 lands. `app/api/routes/search.py` is the simplest complete example. Never read `app.state` in a route directly.
 - **Every route declares `response_model`** and a non-default `status_code` where the spec says so. Errors are raised as `AppError(status, safe_detail)`.
 - **Docstring on every public module, class and function.** Inline comments explain *why*, not *what*.
 - **Typing:** mypy strict passes. Library calls that return `Any` (fastembed's `.tolist()`, chromadb results) go into an explicitly typed variable before `return`.
@@ -79,4 +79,6 @@ def search(body: SearchRequest, embedder: EmbedderDep, store: StoreDep) -> Searc
 - **Anthropic SDK 1.6** is built on `httpx2`. Never pass `httpx` objects to it. For Claude, use `client.beta.messages.create/stream(..., betas=["server-side-fallback-2026-07-01"], fallbacks="default")`, with model `claude-opus-5`. Check `stop_reason == "refusal"` before reading content. This path can't be tested live (no key), so it's unit-tested with fakes.
 - **OpenAI SDK 3.x:** use `max_completion_tokens`. The same client serves Gemini and Ollama through `OPENAI_BASE_URL`.
 - **pre-commit excludes `uv.lock` from `check-added-large-files`.** Lockfiles belong in git.
+- **Chroma `collection.query(n_results=0)` raises `TypeError`.** An empty collection with `n_results >= 1` returns `[[]]`, and `n_results` above the count returns what exists. `VectorStore.query` relies on this; `top_k` is validated to be at least 1.
+- **ruff 0.16 also formats Python code blocks inside Markdown.** `[tool.ruff.format] exclude = ["*.md"]` keeps doc snippets (aligned comments, `...` bodies) as written, so `ruff format --check .` in CI checks only source.
 - **`TestClient(app, raise_server_exceptions=False)`** is needed to assert on the generic 500 response.

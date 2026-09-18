@@ -39,7 +39,7 @@ config ──┬── chunking
 
 ### Phase 2: Core RAG flow (vertical slices)
 - [x] Task 3: Ingest slice, `POST /documents`
-- [ ] Task 4: Search slice, `POST /search`
+- [x] Task 4: Search slice, `POST /search`
 - [ ] Task 5: Ask slice, `POST /ask` with Gemini, OpenAI and Claude providers
 
 ### Checkpoint B: live end-to-end check (human review)

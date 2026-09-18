@@ -111,6 +111,22 @@ Answer in your own words. The goal is to understand *why*, not to memorise. Ques
 
 > Chroma stores only `str`, `int`, `float` and `bool` metadata values, and those are also what exact-match filters need. Validating at the API edge turns a would-be storage error (a 500) into a clear 422. Keys are restricted to a safe pattern, and `document_id`, `chunk_index` and `title` are reserved because the server writes them itself; letting a client override them would break re-ingest and citations.
 
+**Q: Walk me through `POST /search`.** (Task 4)
+
+> Pydantic validates the body: the query is 1 to 2,000 non-blank characters and `top_k` is 1 to 20, defaulting to a setting. The route embeds the query with the same model used for the documents, asks the vector store for the `top_k` nearest chunks, and converts Chroma's cosine distance to similarity with `1 - distance`. It returns each hit with its document id, chunk index, title, text, score and the client's metadata, sorted by score. It never needs the LLM, so it works without an API key.
+
+**Q: Why must the query use the same embedding model as the documents?**
+
+> Each model defines its own vector space. Comparing a vector from one model with vectors from another is meaningless, even when the dimensions happen to match. That's why the embedder is one shared component, injected into both the ingest and the search routes.
+
+**Q: What did real scores look like, and what does that mean?** (Task 4)
+
+> On a small live test, relevant documents scored about 0.67 to 0.71, and unrelated ones 0.40 to 0.63. An off-topic question still got a "best" hit at 0.475. Nearest-neighbour search always returns something, and small models give unrelated text fairly high similarity. So a relevance threshold is needed before answering, and it has to be chosen from measured data, not guessed.
+
+**Q: An empty store: error or empty list?**
+
+> An empty list with 200. Searching an empty index isn't a client mistake, and the spec says so. I checked Chroma's behaviour rather than assuming: `n_results=0` raises a `TypeError`, but an empty collection queried with `n_results` of 1 or more returns an empty result. Validation guarantees `top_k >= 1`, so the empty case needs no special branch.
+
 **Q: Why is there a `MIN_RELEVANCE` threshold?** (Task 5)
 
 > Nearest neighbours are always returned, even when nothing is actually relevant. Without a threshold, an off-topic question still gets "context", and the LLM may produce a confident wrong answer. The threshold lets us say "not enough information" and skip the LLM call. The value is calibrated from measured scores, because small embedding models give unrelated text fairly high similarity.

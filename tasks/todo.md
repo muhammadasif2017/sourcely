@@ -40,7 +40,7 @@ Every task also meets the Definition of Done:
   - Verify: API tests for each rule.
   - Files: `app/schemas/documents.py`, `app/services/vector_store.py`, `app/api/routes/documents.py`, `app/main.py`, `tests/integration/test_documents.py`
 
-- [ ] **Task 4: Search slice, `POST /search`** (S)
+- [x] **Task 4: Search slice, `POST /search`** (S)
   - Acceptance:
     - Returns hits sorted by cosine similarity (`1 - distance`), each with `document_id`, `chunk_index`, `title`, `text`, `score` and `metadata`. The relevant document ranks first.
     - An empty store returns `results: []`. `top_k` outside 1 to 20 and a query outside 1 to 2,000 characters both return 422.

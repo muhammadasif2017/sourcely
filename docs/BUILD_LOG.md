@@ -21,8 +21,9 @@ The log is updated at the end of every task.
 6. [Step 5 (Task 2): Chunking](#step-5-task-2-chunking)
 7. [Step 6 (Task 3): Ingesting documents, `POST /documents`](#step-6-task-3-ingesting-documents-post-documents)
 8. [Step 7: Product planning (after Task 3)](#step-7-product-planning-after-task-3)
-9. [How to run everything built so far](#how-to-run-everything-built-so-far)
-10. [Glossary](#glossary)
+9. [Step 8 (Task 4): Semantic search, `POST /search`](#step-8-task-4-semantic-search-post-search)
+10. [How to run everything built so far](#how-to-run-everything-built-so-far)
+11. [Glossary](#glossary)
 
 ---
 
@@ -401,6 +402,62 @@ Before continuing with Task 4, we stepped back and planned what Sourcely becomes
 ### What this does not change
 
 `SPEC.md` is still the source of truth, and Task 4 is still next. The product documents are a proposal. Several ideas (auth, new endpoints, moving from Chroma to pgvector) are on the "ask first" list in `CLAUDE.md`, so each needs the owner's decision and a `SPEC.md` amendment before any code.
+
+---
+
+## Step 8 (Task 4): Semantic search, `POST /search`
+
+The second vertical slice. It reuses everything Task 3 built: the same embedder turns the query into a vector, and the same Chroma collection finds the nearest chunks.
+
+```
+JSON body -> validate (Pydantic) -> embed_query -> VectorStore.query -> score = 1 - distance -> 200
+```
+
+### 8.1 Request and response models (`app/schemas/search.py`)
+
+- `query` is 1 to 2,000 characters (`Field(min_length=1, max_length=2000)`) and must contain non-whitespace. The whitespace rule is the same `field_validator` pattern as document text. It was added to `SPEC.md` in this task, because a blank query has nothing to search for.
+- `top_k` is `int | None` with `ge=1, le=20`. `None` means "use the `DEFAULT_TOP_K` setting". The route resolves it with `body.top_k or settings.default_top_k`. A `0` can never reach that line, because validation rejects it first.
+- `SearchHit` has exactly the spec fields: `document_id`, `chunk_index`, `title`, `text`, `score`, `metadata`. Its `metadata` holds only the client's own keys, because the three reserved keys are already top-level fields.
+
+### 8.2 Querying the store (`VectorStore.query`)
+
+```python
+result = self._collection.query(query_embeddings=[embedding], n_results=top_k,
+                                include=["documents", "metadatas", "distances"])
+```
+
+Chroma answers a *batch* of query vectors, so every field in the result is a list of lists: one inner list per query vector. We send one vector, so we read index `[0]`. Each hit becomes a small frozen dataclass, `ChunkHit`, so the route never touches Chroma's raw result shape.
+
+**Distance to similarity.** The collection was created with cosine space, so Chroma returns cosine *distance*. `score = 1 - distance` turns it into cosine similarity, where 1 means "same direction" and higher is better. The hits are sorted by score, highest first. Chroma already returns them in that order, but sorting in our code makes the contract explicit instead of depending on a library detail.
+
+**Empty store.** We checked Chroma's behaviour directly: `n_results=0` raises `TypeError`, while an empty collection queried with `n_results=1` returns `[[]]`. Since `top_k` is always at least 1, an empty store naturally gives `results: []`, which is what the spec asks for. Asking for more results than exist returns what there is.
+
+**Why a service type, not the Pydantic schema?** Services don't depend on HTTP shapes. `ChunkHit` belongs to the store, and the route maps it to `SearchHit`. The same `query` method will serve `/ask` in Task 5.
+
+### 8.3 The route (`app/api/routes/search.py`)
+
+Thin, as the layering rule requires: resolve `top_k`, embed the query, query the store, map hits to the response. It doesn't need the LLM, so `/search` works even when no LLM key is set. A test proves that.
+
+### 8.4 Tests (`tests/integration/test_search.py`)
+
+Written first and run red (18 failures, because the route didn't exist). They cover the empty store, the relevant document ranking first, the exact hit fields and the metadata filtering, scores sorted high to low with an identical query scoring 1.0, the `DEFAULT_TOP_K` fallback, `top_k` above the chunk count, search without an LLM key, 8 invalid payloads returning 422, and the boundary values (2,000 characters, `top_k` 1 and 20).
+
+### 8.5 Live check with the real model
+
+With the real `bge-small-en-v1.5` model and three short documents (leave policy, refunds, VPN), every question found the right document first, even with different wording: "how many vacation days do I get" matched the *leave* document, although the word "vacation" never appears in it. That is semantic search working.
+
+| Query | Top hit and score | Other scores |
+|---|---|---|
+| how many vacation days do I get | leave 0.670 | 0.630, 0.454 |
+| can I get my money back | refunds 0.688 | 0.494, 0.446 |
+| connect to the company network remotely | vpn 0.709 | 0.450, 0.395 |
+| what is the capital of France (off topic) | vpn 0.475 | 0.429, 0.402 |
+
+The numbers matter for Task 5. Unrelated text scores 0.40 to 0.63, which overlaps with the relevant range. `MIN_RELEVANCE` therefore can't be guessed. It has to be chosen from a larger sample at Checkpoint B.
+
+### 8.6 A tooling fix found on the way
+
+`ruff format --check .` failed on `CLAUDE.md` and two docs: ruff 0.16 also formats Python code blocks inside Markdown, and it wanted to reflow illustrative snippets. CI runs that exact command, so it would have failed. `pyproject.toml` now excludes `*.md` from formatting.
 
 ---
 

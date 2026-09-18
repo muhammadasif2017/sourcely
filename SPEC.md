@@ -74,7 +74,7 @@ Removes every chunk of that document. Returns **204** when the document existed 
 
 ### `POST /search`: semantic search
 
-Request: `{ "query": "…", "top_k": 4, "filters": { "document_ids": ["a", "b"], "metadata": { "source": "wiki" } } }`. The query is 1 to 2,000 characters. `top_k` is 1 to 20 and defaults to `DEFAULT_TOP_K`.
+Request: `{ "query": "…", "top_k": 4, "filters": { "document_ids": ["a", "b"], "metadata": { "source": "wiki" } } }`. The query is 1 to 2,000 characters and must contain non-whitespace (same rule as document text). `top_k` is 1 to 20 and defaults to `DEFAULT_TOP_K`.
 
 `filters` is optional, and so is each of its fields:
 - `document_ids`: 1 to 100 ids. A chunk matches when its document is in the list.
@@ -269,4 +269,4 @@ Auth, PDF and DOCX parsing, pagination for `GET /documents`, range and `$or` fil
 
 ## Open questions
 
-1. `MIN_RELEVANCE` will be set from measured scores. bge-small often gives unrelated text around 0.4 to 0.5 similarity, so the value needs data.
+1. `MIN_RELEVANCE` will be set from measured scores. bge-small often gives unrelated text around 0.4 to 0.5 similarity, so the value needs data. First measurement (Task 4 live check, 3 short documents, 2026-09-18): the right document scored 0.67 to 0.71, unrelated documents 0.40 to 0.63, and an off-topic question's best hit 0.475. The ranges overlap, so the threshold must come from a larger sample at Checkpoint B.

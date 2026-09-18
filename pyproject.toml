@@ -28,6 +28,10 @@ package = false
 [tool.ruff]
 line-length = 100
 
+[tool.ruff.format]
+# Code blocks in docs are illustrative (aligned comments, `...` bodies), not source to format.
+exclude = ["*.md"]
+
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
 
