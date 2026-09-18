@@ -218,6 +218,7 @@ docs/
   BUILD_LOG.md          Step-by-step build record with the concept behind each step (for learning)
   TECH_STACK.md         Why each technology was chosen: problem solved, advantages, alternatives, limits
   INTERVIEW_PREP.md     Likely interview questions with answers tied to this code
+CLAUDE.md               Agent rules: commands, conventions, boundaries, verified gotchas
 .env.example, README.md, SPEC.md, tasks/, pyproject.toml, uv.lock, .python-version
 ```
 
