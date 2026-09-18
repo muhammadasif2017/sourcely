@@ -17,6 +17,9 @@ def test_defaults_match_spec(monkeypatch):
         "LLM_PROVIDER",
         "MIN_RELEVANCE",
         "EMBEDDING_QUERY_PREFIX",
+        "EMBEDDING_DIM",
+        "DATABASE_URL",
+        "MIGRATION_DATABASE_URL",
     ):
         monkeypatch.delenv(name, raising=False)
     s = make()
@@ -28,6 +31,11 @@ def test_defaults_match_spec(monkeypatch):
     assert s.default_top_k == 4
     assert s.max_document_chars == 200_000
     assert s.min_relevance == 0.58
+    assert s.embedding_dim == 384
+    # 127.0.0.1, not localhost: on Windows, localhost tries IPv6 first and stalls for 15 s.
+    assert "@127.0.0.1:5434/sourcely" in s.database_url
+    assert s.database_url.startswith("postgresql+psycopg://sourcely_app:")
+    assert s.migration_database_url.startswith("postgresql+psycopg://sourcely_owner:")
     assert s.embedding_query_prefix.startswith("Represent this sentence")
 
 

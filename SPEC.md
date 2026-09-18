@@ -433,7 +433,7 @@ The PoC paths and bodies don't change. Every PoC endpoint except `GET /health` n
 
 Workspace management endpoints take the workspace from the path, not from `X-Workspace-ID`. A workspace the caller doesn't belong to is always **404**, never 403, so its existence isn't revealed.
 
-`GET /health` stays public. Its `chunks_indexed` becomes the deployment-wide chunk count, and it adds `database: "ok"` or returns 503 when the database is unreachable.
+`GET /health` stays public. Its `chunks_indexed` becomes the deployment-wide chunk count, and it adds `database: "ok"` or returns 503 `Database unavailable` when the database is unreachable. Database connections time out after 5 seconds, so an outage can't stall requests or health checks.
 
 ### Error table additions
 
@@ -453,9 +453,10 @@ Workspace management endpoints take the workspace from the path, not from `X-Wor
 
 | Variable | Default |
 |---|---|
-| `DATABASE_URL` | `postgresql+psycopg://sourcely_app:sourcely_app@localhost:5432/sourcely` |
-| `MIGRATION_DATABASE_URL` | `postgresql+psycopg://sourcely_owner:sourcely_owner@localhost:5432/sourcely` |
+| `DATABASE_URL` | `postgresql+psycopg://sourcely_app:sourcely_app@127.0.0.1:5434/sourcely` (host port 5434, and `127.0.0.1` rather than `localhost`, which tries IPv6 first and stalls for 15 s on Windows) |
+| `MIGRATION_DATABASE_URL` | `postgresql+psycopg://sourcely_owner:sourcely_owner@127.0.0.1:5434/sourcely` |
 | `EMBEDDING_DIM` | `384`. Must match the model and the `vector(...)` column; checked at startup. |
+| `TEST_ADMIN_DATABASE_URL` | Tests only: `postgresql+psycopg://postgres:postgres@127.0.0.1:5434/postgres`, a superuser connection used to create and drop the per-run test database |
 | `COOKIE_SECURE` | `true` |
 | `SESSION_IDLE_DAYS` | `14` |
 | `EMAIL_BACKEND` | `console` |

@@ -29,8 +29,17 @@ class Settings(BaseSettings):
     embedding_cache_dir: str = "./data/models"
     # Prepended to queries only. Set to "" for models without a retrieval instruction.
     embedding_query_prefix: str = BGE_QUERY_PREFIX
+    # Must match the model's output and the `vector(...)` column. Checked at startup.
+    embedding_dim: int = Field(384, ge=1)
     chroma_path: str = "./data/chroma"
     collection_name: str = "documents"
+
+    # Database. The API connects as a role that owns no table, so row-level security always
+    # applies to it; migrations run as the owner. See SPEC.md, Phase 1.
+    database_url: str = "postgresql+psycopg://sourcely_app:sourcely_app@127.0.0.1:5434/sourcely"
+    migration_database_url: str = (
+        "postgresql+psycopg://sourcely_owner:sourcely_owner@127.0.0.1:5434/sourcely"
+    )
 
     # Chunking and retrieval
     chunk_size: int = Field(800, ge=50)

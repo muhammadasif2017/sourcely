@@ -376,3 +376,23 @@ These answers describe the product plan in [`docs/product/`](product/README.md).
 **Q: How do you decide whether a feature is worth building?**
 
 > Each feature has a success metric and a signal that would make us change it. The risky assumptions get a cheap test first. For example, whether users actually click citations is tested with a clickable prototype and 5 people before the real UI is built.
+
+---
+
+## 13. Phase 1: the database (Task 12)
+
+**Q: Why does the app connect with a different database role than the migrations?**
+
+> Row-level security, which isolates workspaces, is bypassed by a table's owner. If the app connected as the owner, isolation could silently not apply. So `sourcely_owner` owns the schema and runs migrations, and the app connects as `sourcely_app`, which can read and write rows but owns nothing and can't change the schema. A test checks that the app role can't create a table.
+
+**Q: What is a database migration, and why Alembic instead of creating tables at startup?**
+
+> A migration is a versioned script that changes the schema, and the database records which version it's at, so upgrading applies only what's missing. Creating tables at startup works once, but can't change a schema that already holds data, like adding a column. Alembic is SQLAlchemy's migration tool; in Compose, a one-shot `migrate` container runs it before the API starts.
+
+**Q: How do your tests use a real database without interfering with each other?**
+
+> One fresh database per test run, created as a superuser, migrated with the real migrations, and dropped at the end. Before each test every table is truncated. Tests run as the same restricted role as production, so they'd catch a missing permission. If Postgres isn't running, the run stops at once with a message saying how to start it.
+
+**Q: Tell me about a performance problem you found in your tests.**
+
+> The suite went from 20 seconds to 149. `pytest --durations` showed one test took 130 seconds: it checks `/health` when the database is down by connecting to a closed port, and on Windows the connection attempt was dropped rather than refused, so the driver waited for the OS timeout. A real outage would have hung health checks the same way. I added `connect_timeout=5` to the engine and gave the test a 1-second one.

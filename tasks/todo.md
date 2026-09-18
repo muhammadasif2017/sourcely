@@ -119,7 +119,7 @@ Every task also meets the Definition of Done:
 
 Source of truth: `SPEC.md`, section "Phase 1". Every task keeps the Definition of Done above. From Task 12 on, tests need Postgres running (`docker compose up -d db`).
 
-- [ ] **Task 12: Postgres foundation** (M)
+- [x] **Task 12: Postgres foundation** (M)
   - Acceptance:
     - `docker-compose.yml` gains a `db` service (`pgvector/pgvector:pg17`, health check, named volume) and `docker/postgres/init.sql`, which creates the `sourcely_owner` and `sourcely_app` roles.
     - Settings `DATABASE_URL`, `MIGRATION_DATABASE_URL` and `EMBEDDING_DIM` (checked against the model at startup). New dependencies: SQLAlchemy 2, psycopg 3 (binary), Alembic, pgvector, argon2-cffi, email-validator.

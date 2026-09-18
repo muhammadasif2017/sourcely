@@ -8,6 +8,22 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+    services:
+      # The plain postgres image has no pgvector. The test fixtures create the roles,
+      # extensions and a fresh database, so no init script is needed here.
+      db:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5434:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      TEST_ADMIN_DATABASE_URL: postgresql+psycopg://postgres:postgres@127.0.0.1:5434/postgres
     steps:
       - uses: actions/checkout@v5
 

@@ -448,6 +448,38 @@ It has already caught a real issue: a function declared to return `list[float]` 
 
 ---
 
+## 21. PostgreSQL with pgvector (Phase 1, from Task 12)
+
+**What it is.** PostgreSQL is a relational database. pgvector is an extension that adds a `vector` column type, distance operators such as cosine distance (`<=>`) and approximate nearest-neighbour indexes (HNSW).
+
+**Problem it solves.** Phase 1 needs users, sessions, workspaces and keys (relational data with constraints) and tenant isolation that holds even if code forgets a filter. Postgres gives transactions, foreign keys and **row-level security**. pgvector lets the vectors live in the same database, so deleting a document and its vectors is one transaction.
+
+**Why chosen over keeping Chroma plus a separate database.** Two stores can disagree after a crash, need two backups, and row-level security can't cover Chroma. Decision D3 in `docs/product/ARCHITECTURE.md` has the full comparison.
+
+**Where used.** The `db` service in `docker-compose.yml` (`pgvector/pgvector:pg17`, host port 5434), the CI service container, and the per-run test database.
+
+**Limitations.** Tests now need a running Postgres. pgvector's HNSW index is approximate, like Chroma's, and holds its graph in memory.
+
+---
+
+## 22. SQLAlchemy 2, psycopg 3 and Alembic (Phase 1, from Task 12)
+
+**What they are.** SQLAlchemy is Python's standard database toolkit: typed table classes and a query builder. psycopg 3 is the PostgreSQL driver underneath it. Alembic writes and applies versioned schema *migrations* for SQLAlchemy.
+
+**Why chosen.** SQLAlchemy 2's typed API works with mypy strict. The sync engine fits the existing `def` routes, which FastAPI already runs in a threadpool, so no async rewrite is needed. psycopg 3 is the maintained driver (psycopg2 is in maintenance), and its binary package needs no compiler. Alembic is SQLAlchemy's own migration tool; the alternative, creating tables at startup, can't evolve a schema that already holds data.
+
+**Where used.** `app/db/` (base, engine, models), `DbDep` in `app/api/deps.py` (one session and transaction per request), `alembic.ini` and `migrations/`. Migrations connect as `sourcely_owner`; the app connects as `sourcely_app`.
+
+**Details worth knowing.**
+
+- A **naming convention** on the metadata gives every index and constraint a predictable name, so later migrations can refer to them.
+- `pool_pre_ping=True` checks a pooled connection before using it, replacing ones the server dropped.
+- `connect_timeout=5` bounds how long a request waits for an unreachable database.
+
+Also added in Task 12, and explained when first used: `pgvector` (Python package, Task 16), `argon2-cffi` and `email-validator` (Task 13).
+
+---
+
 ## Architecture choices that aren't packages
 
 These are patterns, not libraries, but interviewers ask about them:

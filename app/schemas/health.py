@@ -7,6 +7,7 @@ class HealthResponse(BaseModel):
     """Liveness plus a summary of the loaded components."""
 
     status: str
+    database: str
     chunks_indexed: int
     embedding_model: str
     llm_provider: str

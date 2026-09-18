@@ -1,8 +1,11 @@
 """FastAPI dependencies that hand routes the components stored on `app.state`."""
 
+from collections.abc import Iterator
 from typing import Annotated
 
 from fastapi import Depends, Request
+from sqlalchemy import Engine
+from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.services.embeddings import Embedder
@@ -28,6 +31,21 @@ def get_store(request: Request) -> VectorStore:
     return store
 
 
+def get_engine(request: Request) -> Engine:
+    """The database connection pool."""
+    engine: Engine = request.app.state.engine
+    return engine
+
+
+def get_db(request: Request) -> Iterator[Session]:
+    """One database session and transaction per request.
+
+    The transaction commits when the route returns normally and rolls back if it raises.
+    """
+    with Session(get_engine(request)) as session, session.begin():
+        yield session
+
+
 def get_llm(request: Request) -> LLM | None:
     """The configured LLM, or None when its API key is missing (routes answer 503)."""
     llm: LLM | None = request.app.state.llm
@@ -38,3 +56,5 @@ SettingsDep = Annotated[Settings, Depends(get_settings)]
 EmbedderDep = Annotated[Embedder, Depends(get_embedder)]
 StoreDep = Annotated[VectorStore, Depends(get_store)]
 LLMDep = Annotated[LLM | None, Depends(get_llm)]
+EngineDep = Annotated[Engine, Depends(get_engine)]
+DbDep = Annotated[Session, Depends(get_db)]

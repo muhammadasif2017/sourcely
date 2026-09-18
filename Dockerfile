@@ -31,6 +31,9 @@ WORKDIR /app
 
 COPY --from=build /app/.venv /app/.venv
 COPY app ./app
+# For the one-shot `migrate` service in docker-compose.yml.
+COPY alembic.ini ./
+COPY migrations ./migrations
 
 # Named volumes mount here (see docker-compose.yml). Creating the directories as the
 # sourcely user makes new volumes inherit that ownership.

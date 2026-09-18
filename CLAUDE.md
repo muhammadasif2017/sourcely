@@ -11,8 +11,10 @@ Operational guidance for working in this repository: commands, conventions, boun
 
 ```bash
 uv sync                                                  # install from uv.lock
+docker compose up -d db                                  # Postgres + pgvector on 127.0.0.1:5434 (tests need it)
+uv run alembic upgrade head                              # migrate the dev database (as sourcely_owner)
 uv run uvicorn app.main:create_app --factory --reload    # dev server, http://localhost:8000/docs
-uv run pytest -q                                         # tests (no network, no model downloads)
+uv run pytest -q                                         # tests: need `docker compose up -d db`; no network, no model downloads
 uv run ruff check . && uv run ruff format --check .      # lint and format
 uv run mypy                                              # strict type check of app/
 uv run pre-commit run --all-files                        # every hook, the same checks as CI
@@ -33,6 +35,8 @@ app/api/routes/          One APIRouter per resource
 app/core/                config.py (Settings), errors.py (AppError and handlers), logging.py
 app/schemas/             Pydantic request and response models, one module per resource
 app/services/            Business logic. Never imports from app.api.
+app/db/                  SQLAlchemy base (naming convention), engine, models (all tables imported here)
+migrations/              Alembic; revision files are named <rev>_<slug>.py, e.g. 0001_extensions.py
 tests/conftest.py        FakeEmbedder, in-memory store, settings and client fixtures
 tests/unit/, tests/integration/
 ```
@@ -83,6 +87,10 @@ def search(body: SearchRequest, embedder: EmbedderDep, store: StoreDep) -> Searc
 - **OS environment variables override `.env`** (pydantic-settings precedence). On 2026-09-19 a user-level `OPENAI_API_KEY` (an OpenAI key) was silently replacing the Gemini key from `.env`. It was renamed to `OPENAI_API_KEY_OPENAI`, so new terminals no longer set `OPENAI_API_KEY`. A shell started before that still has the old value: restart it, or use `env -u OPENAI_API_KEY uv run ...`. Tests are unaffected: they build `Settings(_env_file=None, ...)` with explicit values.
 - **Anthropic content blocks:** narrow with `isinstance(block, BetaTextBlock)`, not `block.type == "text"`. The content union has 17 members and mypy strict can't narrow it by the `type` string.
 - **pre-commit excludes `uv.lock` from `check-added-large-files`.** Lockfiles belong in git.
+- **Postgres URLs use `127.0.0.1`, never `localhost`.** On this Windows machine `localhost` resolves to IPv6 `::1` first, and the connection stalls 15 s before falling back. The container publishes only on `127.0.0.1:5434` (5432 and 5433 belong to other projects).
+- **`make_engine` sets `connect_timeout=5`.** Without it, connecting to a host that drops packets waits for the OS: 130 s on Windows. That's how one `/health` test took 2 minutes.
+- **Tests get a fresh database per run** (`sourcely_test_<hex>`, created by the superuser in `TEST_ADMIN_DATABASE_URL`, migrated as `sourcely_owner`, dropped at the end) and truncated tables per test. The app connects as `sourcely_app`, which owns nothing. New tables need no grant: `ALTER DEFAULT PRIVILEGES` covers them.
+- **Creating extensions needs a superuser.** `docker/postgres/init.sql` and the test fixture create `vector` and `citext`; migration `0001` only runs `IF NOT EXISTS`.
 - **Docker: the container user has no home directory, so `HF_HOME` must point somewhere writable.** Without it the model download fails with `Permission denied (os error 13)`: Hugging Face's xet downloader writes a cache under `~`. The Dockerfile sets `HF_HOME=/app/data/models/.huggingface`, inside the model volume.
 - **`RequestSizeLimitMiddleware` must run inside `RequestContextMiddleware`** (added before it, since the last middleware added runs first), so 413 responses still get an `X-Request-ID`. FastAPI turns an exception raised while reading the body into its own 400; the middleware replaces that response with 413.
 - **Chroma `collection.query(n_results=0)` raises `TypeError`.** An empty collection with `n_results >= 1` returns `[[]]`, and `n_results` above the count returns what exists. `VectorStore.query` relies on this; `top_k` is validated to be at least 1.

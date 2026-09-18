@@ -1,8 +1,36 @@
 # Run the whole service with: docker compose up --build
-# Configuration comes from .env (copy .env.example first). Data and the embedding model
-# live in named volumes, so they survive container restarts and rebuilds.
+# Database only (for local development and tests): docker compose up -d db
+# Configuration comes from .env (copy .env.example first). Data lives in named volumes,
+# so it survives container restarts and rebuilds.
 
 services:
+  db:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_PASSWORD: postgres
+    ports:
+      # 5434 on the host, because 5432 and 5433 are often taken by other local projects.
+      - "127.0.0.1:5434:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d sourcely"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  migrate:
+    build: .
+    image: sourcely:latest
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      MIGRATION_DATABASE_URL: postgresql+psycopg://sourcely_owner:sourcely_owner@db:5432/sourcely
+    depends_on:
+      db:
+        condition: service_healthy
+
   api:
     build: .
     image: sourcely:latest
@@ -13,15 +41,19 @@ services:
         # The API still starts without .env: /documents and /search work, /ask returns 503.
         required: false
     environment:
-      # Inside the container these paths are fixed by the image and backed by the volumes
-      # below, whatever a local .env says.
+      # Inside the container these are fixed by Compose, whatever a local .env says.
+      DATABASE_URL: postgresql+psycopg://sourcely_app:sourcely_app@db:5432/sourcely
       CHROMA_PATH: /app/data/chroma
       EMBEDDING_CACHE_DIR: /app/data/models
     volumes:
       - chroma-data:/app/data/chroma
       - model-cache:/app/data/models
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     restart: unless-stopped
 
 volumes:
+  postgres-data:
   chroma-data:
   model-cache:

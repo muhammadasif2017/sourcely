@@ -30,8 +30,9 @@ The log is updated at the end of every task.
 15. [Step 14 (Task 9): Streaming answers, `POST /ask/stream`](#step-14-task-9-streaming-answers-post-askstream)
 16. [Step 15 (Task 10): Docker, and a request size limit](#step-15-task-10-docker-and-a-request-size-limit)
 17. [Step 16 (Task 11): README and final verification](#step-16-task-11-readme-and-final-verification)
-18. [How to run everything built so far](#how-to-run-everything-built-so-far)
-19. [Glossary](#glossary)
+18. [Step 17 (Task 12): Postgres foundation](#step-17-task-12-postgres-foundation)
+19. [How to run everything built so far](#how-to-run-everything-built-so-far)
+20. [Glossary](#glossary)
 
 ---
 
@@ -845,11 +846,65 @@ Documentation drifts from code silently, so the README was checked by *running* 
 
 ---
 
+## Step 17 (Task 12): Postgres foundation
+
+Phase 1 starts here. This task adds the database and everything around it (containers, roles, migrations, test database, CI) without any business tables yet, so later tasks only add tables and routes.
+
+### 17.1 Postgres in Compose, with two roles
+
+`docker compose up -d db` starts `pgvector/pgvector:pg17`. The plain `postgres` image has no `vector` extension. On first start, `docker/postgres/init.sql` creates:
+
+- **`sourcely_owner`**, which owns the database and runs migrations;
+- **`sourcely_app`**, which the API uses. It can read and write rows but owns nothing.
+
+Why two? Row-level security (Task 16) filters rows per workspace, but a table's **owner bypasses it** by default. If the app connected as the owner, isolation could silently not apply. A test (`test_app_role_cannot_create_tables`) proves the app role can't even create a table.
+
+`ALTER DEFAULT PRIVILEGES FOR ROLE sourcely_owner ... GRANT SELECT, INSERT, UPDATE, DELETE ... TO sourcely_app` means every table the owner creates later is automatically usable by the app, with no grant in each migration.
+
+### 17.2 Two Windows surprises
+
+- **Ports.** 5432 and 5433 were already used by two other local projects, so Sourcely publishes on **5434**.
+- **`localhost` is slow.** Connecting to `localhost` took **15 seconds**, to `127.0.0.1` 0.04 seconds. Windows resolves `localhost` to IPv6 `::1` first; the container listens only on IPv4, and the attempt waits for a timeout before falling back. All URLs use `127.0.0.1`, and a config test guards against a regression.
+
+### 17.3 Migrations with Alembic
+
+A **migration** is a versioned script that changes the schema: `0001` creates X, `0002` adds Y. Each database records its version (the `alembic_version` table), so `alembic upgrade head` applies only what's missing. That's how a schema changes without losing data.
+
+- `migrations/env.py` reads the URL from settings (`MIGRATION_DATABASE_URL`), so credentials never go into `alembic.ini`.
+- `app/db/models.py` imports every table, so Alembic's *autogenerate* can compare the models with the database.
+- Migration `0001` only checks that the `vector` and `citext` extensions exist. Creating an extension needs a superuser, so `init.sql` and the test fixture create them.
+- In Compose, a one-shot **`migrate`** service runs `alembic upgrade head` and exits; `api` starts only after it finished successfully (`condition: service_completed_successfully`).
+
+### 17.4 The app side
+
+- `create_app(..., engine=None)` builds the engine in the lifespan (or accepts one from a test), and disposes it on shutdown.
+- `DbDep` gives a route one `Session` whose transaction commits when the route returns and rolls back if it raises.
+- `/health` runs `SELECT 1`. If that fails it returns **503** "Database unavailable", because health checks and load balancers look at the status code.
+- **Startup checks the embedding dimension.** The model's vectors must fit the `vector(384)` column Task 16 creates. A mismatch now stops the app at startup with a clear message, instead of failing on the first insert.
+
+### 17.5 The 2-minute test
+
+The first full run took 149 seconds instead of 20. `--durations` showed one test responsible for 130 of them: the "database is down" test, connecting to port 1. On Windows, when nothing listens, the attempt can be dropped rather than refused, and psycopg waited for the operating system's own timeout. A production outage would have stalled `/health` the same way. The fix is `connect_timeout=5` in `make_engine`, and the test passes an engine with a 1-second timeout. The suite is back to about 22 seconds.
+
+### 17.6 The test database
+
+- One **session-scoped** fixture creates `sourcely_test_<random>` as a superuser (`TEST_ADMIN_DATABASE_URL`), creates the roles if missing (so it works on a bare CI Postgres), adds extensions and grants, runs the migrations as the owner, and drops the database at the end with `DROP DATABASE ... WITH (FORCE)`.
+- Before each test, every table except `alembic_version` is truncated, so tests don't see each other's rows.
+- If Postgres isn't running, the run stops at once with "Start it with: docker compose up -d db", not with 237 connection errors.
+- The fake embedder now returns 384-dimension vectors, to fit the column.
+- CI runs the same image as a **service container** on port 5434.
+
+All 237 tests pass (4 new: health with the database, 503 when it's down, the dimension check, and the app role's limits). The full Compose stack came up with `db` healthy, `migrate` exited 0, and `api` healthy.
+
+---
+
 ## How to run everything built so far
 
 ```bash
 cd C:\dev\sourcely
 uv sync                                                    # install exact locked versions
+docker compose up -d db                                    # Postgres + pgvector (needed from Phase 1)
+uv run alembic upgrade head                                # create or update the schema
 cp .env.example .env                                       # then put your Gemini key in .env
 uv run uvicorn app.main:create_app --factory --reload      # http://localhost:8000/docs
 uv run pytest -q                                           # tests
