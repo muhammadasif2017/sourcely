@@ -379,7 +379,7 @@ Written first (red), then the code (green). They cover the 201 body, the stored 
 ## How to run everything built so far
 
 ```bash
-cd C:\dev\rag-api
+cd C:\dev\sourcely
 uv sync                                                    # install exact locked versions
 cp .env.example .env                                       # then put your Gemini key in .env
 uv run uvicorn app.main:create_app --factory --reload      # http://localhost:8000/docs
