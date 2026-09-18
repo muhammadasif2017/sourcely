@@ -1,4 +1,4 @@
-# Interview Prep: RAG API
+# Interview Prep: Sourcely
 
 These are questions an interviewer is likely to ask about this project, with model answers tied to the actual code. Read [`BUILD_LOG.md`](BUILD_LOG.md) first for the step-by-step build, and [`TECH_STACK.md`](TECH_STACK.md) for the professional reasons behind every technology choice. Questions such as "Why did you choose X over Y?" are answered there in depth.
 

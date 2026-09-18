@@ -1,4 +1,4 @@
-# Implementation Plan: RAG API (proof of concept)
+# Implementation Plan: Sourcely (proof of concept)
 
 Source of truth: [`SPEC.md`](../SPEC.md). Tasks with acceptance criteria are in [`todo.md`](todo.md).
 

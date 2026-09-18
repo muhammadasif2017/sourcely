@@ -51,7 +51,7 @@ def create_app(
         yield
 
     app = FastAPI(
-        title="RAG API",
+        title="Sourcely",
         version="0.1.0",
         summary="Ingest text, search it semantically and answer questions from it with an LLM.",
         lifespan=lifespan,

@@ -1,4 +1,4 @@
-# Tasks: RAG API
+# Tasks: Sourcely
 
 Every task also meets the Definition of Done:
 - `uv run pytest -q` passes.

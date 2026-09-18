@@ -1,6 +1,6 @@
 # Build Log: how this project was built, step by step
 
-This log records every step taken to build the RAG API, in order, with the commands that were run and the reasons behind them. It is written for someone who is new to FastAPI. Each step explains the framework or Python concept it relies on, so you can rebuild the project yourself and explain it in an interview.
+This log records every step taken to build Sourcely, a RAG API, in order, with the commands that were run and the reasons behind them. It is written for someone who is new to FastAPI. Each step explains the framework or Python concept it relies on, so you can rebuild the project yourself and explain it in an interview.
 
 - **What** we are building and the decisions that shape it: [`SPEC.md`](../SPEC.md)
 - **The task order** and progress: [`tasks/plan.md`](../tasks/plan.md), [`tasks/todo.md`](../tasks/todo.md)
@@ -47,6 +47,11 @@ We also checked the neighbouring projects in `C:\dev` (`helpdesk-copilot`, `job-
 cd C:\dev
 uv init --app --no-readme rag-api     # creates pyproject.toml, .python-version, .gitignore, git repo
 cd rag-api
+```
+
+The project started as `rag-api` and was renamed to Sourcely after Task 3, because every answer comes with its sources. The folder is now `sourcely`.
+
+```bash
 uv python pin 3.12                    # writes "3.12" into .python-version
 uv add fastapi "uvicorn[standard]" chromadb fastembed pydantic-settings anthropic openai
 uv add --dev pytest httpx ruff mypy pre-commit
@@ -176,7 +181,7 @@ def create_app(settings=None, *, embedder=None, store=None) -> FastAPI:
         app.state.store = store or VectorStore(chromadb.PersistentClient(...), ...)
         yield            # the app serves requests while paused here
 
-    app = FastAPI(title="RAG API", lifespan=lifespan)
+    app = FastAPI(title="Sourcely", lifespan=lifespan)
     app.add_middleware(RequestContextMiddleware)
     register_exception_handlers(app)
     app.include_router(health.router)

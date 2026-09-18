@@ -1,4 +1,4 @@
-# Spec: RAG API (proof of concept)
+# Spec: Sourcely (proof of concept)
 
 ## Objective
 

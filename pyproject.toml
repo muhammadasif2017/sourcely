@@ -1,7 +1,7 @@
 [project]
-name = "rag-api"
+name = "sourcely"
 version = "0.1.0"
-description = "Proof-of-concept RAG API: ingest, embed, search and answer with an LLM"
+description = "Sourcely: proof-of-concept RAG API that answers with cited sources. Ingest, embed, search and answer with an LLM"
 requires-python = ">=3.12"
 dependencies = [
     "anthropic>=1.6.0",
