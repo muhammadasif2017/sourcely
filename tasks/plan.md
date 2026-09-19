@@ -102,7 +102,7 @@ Approved 2026-09-19 with decisions D1 (own auth), D2 (PostgreSQL) and D3 (pgvect
 - [x] Task 16: Tenant data on pgvector
 
 ### Checkpoint E: isolation (human review)
-- [ ] Isolation proven at the HTTP and database levels; parity gate passed.
+- [x] Isolation proven at the HTTP and database levels; parity gate passed. Approved 2026-09-19.
 
 - [ ] Task 17: Members and invites
 - [ ] Task 18: Compose, docs and live verification

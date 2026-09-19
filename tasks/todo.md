@@ -165,8 +165,8 @@ Source of truth: `SPEC.md`, section "Phase 1". Every task keeps the Definition o
   - Files: `app/services/vector_store.py`, `app/api/routes/*`, `app/main.py`, `migrations/versions/0005_*`, `scripts/calibrate.py`, `tests/`
 
 ### Checkpoint E (human review)
-- [ ] Two workspaces can't see each other's data, proven at the HTTP and database levels.
-- [ ] The parity gate passed, or the new threshold is recorded.
+- [x] Two workspaces can't see each other's data, proven at the HTTP and database levels. Approved by the owner on 2026-09-19.
+- [x] The parity gate passed, or the new threshold is recorded. (Passed: identical scores.)
 
 - [ ] **Task 17: Members and invites** (S)
   - Acceptance:
