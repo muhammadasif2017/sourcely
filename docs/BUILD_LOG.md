@@ -1182,8 +1182,8 @@ The suite was heading past 2 minutes: every signed-in test user costs Argon2 has
 
 ### 22.4 Tests
 
-- `tests/integration/test_members.py` (24): the sorted list, who can list, allowed and refused role changes (a table of five refusals), removal and its immediate effect, four refused removals, leaving for each non-owner role, and CSRF.
-- `tests/integration/test_invites.py` (19): the email content, deduplication, replacing a pending invite, five validation cases, 409 for members, who can invite which roles, only the hash stored, accepting (single use), sign up then accept, the wrong email (409), expired, revoked and unknown tokens (410), session and CSRF, and another workspace's invite (404).
+- `tests/integration/test_members.py` (23): the sorted list, who can list, allowed and refused role changes (a table of five refusals), removal and its immediate effect, four refused removals, leaving for each non-owner role, and CSRF.
+- `tests/integration/test_invites.py` (20): the email content, deduplication, replacing a pending invite, five validation cases, 409 for members, who can invite which roles, only the hash stored, accepting (single use), sign up then accept, the wrong email (409), expired, revoked and unknown tokens (410), session and CSRF, and another workspace's invite (404).
 
 ---
 
