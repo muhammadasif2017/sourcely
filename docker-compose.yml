@@ -43,10 +43,8 @@ services:
     environment:
       # Inside the container these are fixed by Compose, whatever a local .env says.
       DATABASE_URL: postgresql+psycopg://sourcely_app:sourcely_app@db:5432/sourcely
-      CHROMA_PATH: /app/data/chroma
       EMBEDDING_CACHE_DIR: /app/data/models
     volumes:
-      - chroma-data:/app/data/chroma
       - model-cache:/app/data/models
     depends_on:
       migrate:
@@ -55,5 +53,4 @@ services:
 
 volumes:
   postgres-data:
-  chroma-data:
   model-cache:

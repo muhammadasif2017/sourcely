@@ -13,12 +13,13 @@ from typing import Annotated
 from fastapi import Depends, Request, Response, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import DbDep, SettingsDep
+from app.api.deps import DbDep, SettingsDep, StoreDep
 from app.core.config import Settings
 from app.core.errors import AppError
 from app.db.models import AuthSession, User
 from app.services import accounts, api_keys, workspaces
 from app.services.accounts import NewSession
+from app.services.vector_store import WorkspaceIndex, set_workspace
 from app.services.workspaces import Action, allowed
 
 SESSION_COOKIE = "sourcely_session"
@@ -178,3 +179,16 @@ def get_workspace_member(workspace_id: str, current: SessionDep, db: DbDep) -> P
 
 PrincipalDep = Annotated[Principal, Depends(get_principal)]
 MemberDep = Annotated[Principal, Depends(get_workspace_member)]
+
+
+def get_workspace_index(principal: PrincipalDep, db: DbDep, store: StoreDep) -> WorkspaceIndex:
+    """The vector store for the caller's workspace, with row-level security switched on.
+
+    Setting `app.workspace_id` here, once per request, is what makes the database show this
+    workspace's documents and chunks and nothing else.
+    """
+    set_workspace(db, principal.workspace_id)
+    return WorkspaceIndex(store=store, db=db, workspace_id=principal.workspace_id)
+
+
+IndexDep = Annotated[WorkspaceIndex, Depends(get_workspace_index)]

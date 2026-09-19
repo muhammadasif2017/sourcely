@@ -8,7 +8,6 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-import chromadb
 from fastapi import FastAPI
 from sqlalchemy import Engine
 
@@ -21,7 +20,7 @@ from app.db.engine import make_engine
 from app.services.email import EmailSender, create_email_sender
 from app.services.embeddings import Embedder, FastEmbedEmbedder
 from app.services.llm import LLM, create_llm
-from app.services.vector_store import VectorStore
+from app.services.vector_store import PgVectorStore
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +29,6 @@ def create_app(
     settings: Settings | None = None,
     *,
     embedder: Embedder | None = None,
-    store: VectorStore | None = None,
     llm: LLM | None = None,
     engine: Engine | None = None,
     email_sender: EmailSender | None = None,
@@ -49,9 +47,8 @@ def create_app(
             settings.embedding_cache_dir,
             settings.embedding_query_prefix,
         )
-        app.state.store = store or VectorStore(
-            chromadb.PersistentClient(path=settings.chroma_path), settings.collection_name
-        )
+        # Stateless: each call gets the request's session and workspace.
+        app.state.store = PgVectorStore()
         _check_embedding_dim(app.state.embedder, settings.embedding_dim)
         # None when the provider's key is missing: /ask answers 503, the rest keeps working.
         app.state.llm = llm if llm is not None else create_llm(settings)

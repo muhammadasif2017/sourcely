@@ -34,8 +34,9 @@ The log is updated at the end of every task.
 19. [Step 18 (Task 13): Accounts and sessions](#step-18-task-13-accounts-and-sessions)
 20. [Step 19 (Task 14): Workspaces, roles and the Principal](#step-19-task-14-workspaces-roles-and-the-principal)
 21. [Step 20 (Task 15): API keys](#step-20-task-15-api-keys)
-22. [How to run everything built so far](#how-to-run-everything-built-so-far)
-23. [Glossary](#glossary)
+22. [Step 21 (Task 16): Tenant data on pgvector](#step-21-task-16-tenant-data-on-pgvector)
+23. [How to run everything built so far](#how-to-run-everything-built-so-far)
+24. [Glossary](#glossary)
 
 ---
 
@@ -1082,6 +1083,69 @@ Three rules keep the two paths apart:
 - `tests/integration/test_api_keys.py` (21): the key shown once and only its hash stored, name validation, role and stranger checks, CSRF on creation, the key resolving to an editor Principal, the workspace header rule, 4 kinds of bad credential, revocation taking effect at once, another workspace's key (404), deleting a workspace killing its keys, cookie plus key (400), keys refused on 5 session-only endpoints, and the once-a-minute `last_used_at`.
 
 The suite now takes about a minute, because each signed-in test user costs two Argon2 hashes.
+
+---
+
+## Step 21 (Task 16): Tenant data on pgvector
+
+The core of Phase 1. Documents, chunks and vectors move from Chroma into Postgres, every data route requires a `Principal`, and three independent layers keep workspaces apart.
+
+### 21.1 Tables (migration `0005`)
+
+- `documents`: primary key `(workspace_id, document_id)`, so the same id can exist in two workspaces. Title, metadata as `jsonb`, and timestamps. This table also fixes the PoC's slow listing: `GET /documents` no longer reads every chunk.
+- `chunks`: primary key `(workspace_id, document_id, chunk_index)`, the text, and `embedding vector(384)`. A foreign key to `documents` with `ON DELETE CASCADE` means deleting a document deletes its chunks in the same statement.
+- An **HNSW index** with `vector_cosine_ops`: the same kind of approximate nearest-neighbour graph Chroma used, now inside Postgres.
+
+### 21.2 Row-level security
+
+**Row-level security (RLS)** lets the database filter rows per query. Migration `0005` turns it on for both tables with one policy:
+
+```sql
+ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON documents
+  USING      (workspace_id = NULLIF(current_setting('app.workspace_id', true), '')::uuid)
+  WITH CHECK (workspace_id = NULLIF(current_setting('app.workspace_id', true), '')::uuid);
+```
+
+- `USING` filters what can be **read, updated or deleted**; `WITH CHECK` what can be **written**.
+- Each request sets the workspace on its transaction: `SELECT set_config('app.workspace_id', :id, true)`. The `true` makes it **transaction-local**, like `SET LOCAL`, so a pooled connection can't carry one request's workspace into the next. A test proves it.
+- **When the setting is missing**, the comparison is NULL and no row matches. Forgetting to set it hides everything; it never shows everything.
+- **Why `NULLIF`?** After a transaction-local setting ends, a reused connection reports `''`, not NULL, and `''::uuid` is an error.
+- This only works because the app connects as `sourcely_app`, which **doesn't own** the tables (Task 12). Owners bypass RLS.
+
+**The count for `/health`.** `/health` shows the chunk count for the whole deployment, which RLS hides from the app role. `chunk_count()` is a `SECURITY DEFINER` function: it runs with its owner's rights and returns only a number. Its `search_path` is pinned, a standard precaution for such functions.
+
+### 21.3 `PgVectorStore` and `WorkspaceIndex`
+
+`PgVectorStore` implements the same operations as the Chroma store, in SQL through SQLAlchemy and pgvector:
+
+- **Score:** `1 - (embedding <=> query)`, cosine distance. Exactly the PoC's definition, so `MIN_RELEVANCE` keeps its meaning.
+- **Filters:** `document_id IN (...)`, and JSONB **containment** `metadata @> '{"source": "wiki"}'` for metadata. Containment keeps typed matching: the number `2026` doesn't match the string `"2026"`.
+- **Filtered searches keep their top-k.** An HNSW scan normally gathers a fixed number of candidates and then filters them, so a strict filter could leave fewer than `top_k`. pgvector 0.8's `hnsw.iterative_scan = relaxed_order` keeps scanning until it has enough. A test puts 60 closer non-matching chunks in front of 5 matching ones and still gets 4 results.
+- **Replace is one transaction:** upsert the document row, delete its chunks, insert the new ones. The PoC's "not fully atomic" note no longer applies, and a test shows a failure halfway leaves the old version intact.
+
+Every method takes the session and the workspace. `WorkspaceIndex` bundles store, session and workspace, and `IndexDep` builds it **after** setting `app.workspace_id`. Routes and services only ever see a `WorkspaceIndex`, so they can't query without a workspace.
+
+### 21.4 Routes
+
+Every PoC route kept its path and body, and gained two dependencies: `PrincipalDep` (who is calling) and `IndexDep` (their workspace's data). Writes call `require(principal, "write")`, reads `require(principal, "read")`. Only `/health` stays public.
+
+### 21.5 Tests
+
+- **The test client authenticates with an API key.** The `api_key` fixture inserts a workspace and a key directly (no sign-up, so no Argon2 cost), and `client` sends it on every request. Nearly all PoC tests passed unchanged on the first run against Postgres.
+- Tests that inspected Chroma directly now use `store`, a read-only probe over Postgres (connected as the owner, so it bypasses RLS).
+- **Store and RLS tests** (`tests/integration/test_vector_store.py`, 20): filters of every type, typed matching, top-k under a strict filter, atomic replace, the deployment-wide count, and RLS at the database level with raw `SELECT`s and no `WHERE` clause: another workspace's rows are invisible, nothing is visible with no workspace set, writing into another workspace is refused, and the setting doesn't leak into the next transaction.
+- **Cross-tenant tests generated from the route table** (`tests/integration/test_tenant_isolation.py`, 20). The test walks the app's routes, finds every one that depends on `get_principal`, and requires a case in `CASES` for each. Workspace A holds a secret; workspace B's key then lists, creates, uploads, deletes, searches, asks and streams, and each case checks B saw nothing and changed nothing of A's. A route added later without a case makes the suite fail. The same file checks that every data route answers 401 without a credential, and the role rules over sessions.
+
+**A surprise in the route walk.** The first run found **no** routes, so the coverage check compared two empty sets and passed. FastAPI 0.141 keeps each included router as one `_IncludedRouter` entry (with the router under `.original_router`) instead of copying its routes into `app.routes`. The walk now recurses into them, and a separate test asserts that discovery finds known routes, so an empty discovery can't pass silently again.
+
+### 21.6 The parity gate, and removing Chroma
+
+`scripts/calibrate.py` now runs on `PgVectorStore` (in a throwaway workspace in the development database). Every score matched Chroma's to three decimals, for all 22 questions: top-1 13 of 14, and at `MIN_RELEVANCE = 0.58` with the prefix, all 14 answerable questions kept and all 8 unanswerable ones blocked. Both use exact cosine distance on the same vectors, so this was expected, but the plan required measuring it rather than assuming it.
+
+Then `uv remove chromadb` took chromadb and its dependencies out, along with `CHROMA_PATH`, `COLLECTION_NAME` and the Chroma volume in Compose. The rebuilt stack started, `migrate` applied everything through `0005`, and `/documents` without a credential returned 401.
+
+All 368 tests pass.
 
 ---
 

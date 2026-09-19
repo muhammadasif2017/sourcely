@@ -5,7 +5,8 @@ from typing import Annotated
 
 from pydantic import BaseModel, Field, field_validator
 
-# Chroma stores only scalar metadata values. NaN and infinity are not valid JSON numbers.
+# Metadata values are scalars, so they can be matched exactly by filters. NaN and infinity are
+# not valid JSON numbers.
 MetadataValue = str | int | Annotated[float, Field(allow_inf_nan=False)] | bool
 
 DOCUMENT_ID_PATTERN = r"^[A-Za-z0-9._-]{1,128}$"

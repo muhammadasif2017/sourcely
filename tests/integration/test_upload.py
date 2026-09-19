@@ -7,10 +7,6 @@ def _upload(client, filename, content: bytes, **form):
     return client.post("/documents/upload", files={"file": (filename, content)}, data=form)
 
 
-def _stored_ids(store, document_id):
-    return store._collection.get(where={"document_id": document_id})["ids"]
-
-
 def test_txt_upload_returns_201_with_filename_as_title(client, store):
     r = _upload(client, "pets.txt", TEXT.encode(), document_id="pets")
     assert r.status_code == 201
@@ -20,7 +16,7 @@ def test_txt_upload_returns_201_with_filename_as_title(client, store):
         "chunks": 1,
         "characters": len(TEXT),
     }
-    assert _stored_ids(store, "pets") == ["pets:0"]
+    assert store.chunk_keys("pets") == ["pets:0"]
 
 
 @pytest.mark.parametrize("filename", ["notes.md", "NOTES.MD", "Report.Txt"])
@@ -39,7 +35,7 @@ def test_reupload_replaces_document(client, store):
     assert first["chunks"] > 1
     r = _upload(client, "a.txt", b"Now short.", document_id="doc")
     assert r.json()["chunks"] == 1
-    assert _stored_ids(store, "doc") == ["doc:0"]
+    assert store.chunk_keys("doc") == ["doc:0"]
 
 
 def test_uploaded_text_is_searchable(client):
@@ -52,7 +48,7 @@ def test_uploaded_text_is_searchable(client):
 def test_utf8_bom_is_removed(client, store):
     r = _upload(client, "bom.txt", b"\xef\xbb\xbf" + TEXT.encode(), document_id="bom")
     assert r.json()["characters"] == len(TEXT)
-    assert store._collection.get(ids=["bom:0"])["documents"][0].startswith("Cats")
+    assert store.chunk_text("bom", 0).startswith("Cats")
 
 
 def test_title_is_the_base_name_without_client_path(client):

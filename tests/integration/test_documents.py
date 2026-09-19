@@ -5,12 +5,6 @@ LONG_TEXT = "\n\n".join(
 )
 
 
-def _stored(store, document_id):
-    """Ids and metadatas of one document's chunks, read straight from the collection."""
-    got = store._collection.get(where={"document_id": document_id})
-    return got["ids"], got["metadatas"]
-
-
 def test_ingest_returns_201_with_summary(client):
     r = client.post(
         "/documents",
@@ -24,7 +18,7 @@ def test_ingest_returns_201_with_summary(client):
     assert body["chunks"] > 1
 
 
-def test_ingest_stores_chunk_ids_and_metadata(client, store):
+def test_ingest_stores_chunks_and_metadata(client, store):
     r = client.post(
         "/documents",
         json={
@@ -35,16 +29,11 @@ def test_ingest_stores_chunk_ids_and_metadata(client, store):
         },
     )
     chunks = r.json()["chunks"]
-    ids, metadatas = _stored(store, "doc-1")
-    assert sorted(ids) == sorted(f"doc-1:{i}" for i in range(chunks))
-    by_index = sorted(metadatas, key=lambda m: m["chunk_index"])
-    assert [m["chunk_index"] for m in by_index] == list(range(chunks))
-    for m in by_index:
-        assert m["document_id"] == "doc-1"
-        assert m["title"] == "Topics"
-        assert m["source"] == "wiki"
-        assert m["year"] == 2026
-        assert m["public"] is True
+    assert store.chunk_keys("doc-1") == [f"doc-1:{i}" for i in range(chunks)]
+    assert store.document("doc-1") == {
+        "title": "Topics",
+        "metadata": {"source": "wiki", "year": 2026, "score": 0.5, "public": True},
+    }
     assert store.count() == chunks
 
 
@@ -55,30 +44,26 @@ def test_ingest_generates_id_and_defaults_title(client, store):
     assert len(body["document_id"]) == 36
     assert body["title"] == ""
     assert body["chunks"] == 1
-    ids, _ = _stored(store, body["document_id"])
-    assert ids == [f"{body['document_id']}:0"]
+    assert store.chunk_keys(body["document_id"]) == [f"{body['document_id']}:0"]
 
 
 def test_reingest_shorter_version_leaves_no_orphans(client, store):
     first = client.post("/documents", json={"text": LONG_TEXT, "document_id": "doc-1"}).json()
-    old_last = f"doc-1:{first['chunks'] - 1}"
     assert first["chunks"] > 1
 
     r = client.post("/documents", json={"text": "Now it is short.", "document_id": "doc-1"})
     assert r.status_code == 201
     assert r.json()["chunks"] == 1
-    ids, metadatas = _stored(store, "doc-1")
-    assert ids == ["doc-1:0"]
-    assert old_last not in store._collection.get()["ids"]
+    assert store.chunk_keys("doc-1") == ["doc-1:0"]
     assert store.count() == 1
-    assert metadatas[0]["title"] == ""
+    assert store.document("doc-1")["title"] == ""
 
 
 def test_reingest_leaves_other_documents_alone(client, store):
     client.post("/documents", json={"text": "Alpha text.", "document_id": "a"})
     client.post("/documents", json={"text": "Beta text.", "document_id": "b"})
     client.post("/documents", json={"text": "Alpha again.", "document_id": "a"})
-    assert _stored(store, "b")[0] == ["b:0"]
+    assert store.chunk_keys("b") == ["b:0"]
     assert store.count() == 2
 
 

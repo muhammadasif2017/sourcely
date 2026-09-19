@@ -44,11 +44,11 @@ tests/unit/, tests/integration/
 ## Conventions
 
 - **Layering:** routes stay thin. They validate, call a service and return a schema. Logic lives in `app/services/`.
-- **Route handlers are plain `def`, not `async def`.** fastembed, Chroma and the SDK clients as used here are blocking. FastAPI runs `def` handlers in its threadpool.
-- **Components reach routes only through `app/api/deps.py`:** `SettingsDep`, `EmbedderDep`, `StoreDep` and `LLMDep` (`LLM | None`: None means no API key, and the route answers 503). `app/api/routes/search.py` is the simplest complete example. Never read `app.state` in a route directly.
+- **Route handlers are plain `def`, not `async def`.** fastembed, SQLAlchemy (sync) and the SDK clients as used here are blocking. FastAPI runs `def` handlers in its threadpool.
+- **Components reach routes only through `app/api/deps.py`:** `SettingsDep`, `EmbedderDep`, `StoreDep`, `DbDep`, `EngineDep` and `LLMDep`; workspace data comes only through `IndexDep` (in `app/api/auth.py`), which sets `app.workspace_id` on the transaction and returns a `WorkspaceIndex` (`LLM | None`: None means no API key, and the route answers 503). `app/api/routes/search.py` is the simplest complete example. Never read `app.state` in a route directly.
 - **Every route declares `response_model`** and a non-default `status_code` where the spec says so. Errors are raised as `AppError(status, safe_detail)`.
 - **Docstring on every public module, class and function.** Inline comments explain *why*, not *what*.
-- **Typing:** mypy strict passes. Library calls that return `Any` (fastembed's `.tolist()`, chromadb results) go into an explicitly typed variable before `return`.
+- **Typing:** mypy strict passes. Library calls that return `Any` (fastembed's `.tolist()`) go into an explicitly typed variable before `return`.
 - **Loggers:** `logging.getLogger(__name__)`, so everything is under `app.*`. `configure_logging` sets `propagate=False` on `app`.
 - **Pattern to copy for a new route:**
 
@@ -56,7 +56,7 @@ tests/unit/, tests/integration/
 router = APIRouter(tags=["search"])
 
 @router.post("/search", response_model=SearchResponse)
-def search(body: SearchRequest, embedder: EmbedderDep, store: StoreDep) -> SearchResponse:
+def search(body: SearchRequest, principal: PrincipalDep, index: IndexDep) -> SearchResponse:
     """One-line summary shown in /docs."""
     ...
 ```
@@ -76,8 +76,9 @@ def search(body: SearchRequest, embedder: EmbedderDep, store: StoreDep) -> Searc
 ## Verified gotchas
 
 - **Python 3.12 is pinned.** The system Python is 3.14, where onnxruntime wheels are unreliable. Don't change `.python-version`.
-- **Chroma `EphemeralClient` instances share one in-process database.** Every test needs its own collection name (`conftest.py` uses `test-<uuid>`). Collection names must be 3 to 512 characters from `[a-zA-Z0-9._-]`.
-- **Always create collections with `embedding_function=None`.** We pass our own vectors, and otherwise Chroma downloads its default model. Collections use cosine space, so similarity = `1 - distance`.
+- **Vectors live in Postgres (pgvector) since Task 16; Chroma is gone.** Similarity = `1 - (embedding <=> query)`, cosine distance, the same as the PoC. Filtered queries run `SET LOCAL hnsw.iterative_scan = relaxed_order`, so a filter can't empty the top-k. `PgVectorStore` is stateless; everything goes through a `WorkspaceIndex` (store + session + workspace).
+- **Every new workspace route must be added to `CASES` in `tests/integration/test_tenant_isolation.py`**, or `test_every_workspace_route_has_an_isolation_case` fails. That's intended.
+- **FastAPI 0.141 keeps included routers as `_IncludedRouter` entries** in `app.routes` (the router is in `.original_router`). Code that walks routes must recurse, as the isolation test does.
 - **fastembed `query_embed()` returns the same vector as `embed()` for bge-small-en-v1.5.** Verified: it adds no query instruction. `FastEmbedEmbedder` adds `EMBEDDING_QUERY_PREFIX` itself, to queries only. Changing the prefix or the model means recalibrating `MIN_RELEVANCE`.
 - **The model downloads to `EMBEDDING_CACHE_DIR` (`./data/models`, about 65 MB) on first start.** fastembed's default cache is a temp directory that the OS can wipe.
 - **Gemini:** `gemini-2.5-*` models return 404 for new users. `gemini-3.5-flash-lite` is verified and pinned. On the free tier, Google may use the data, so don't ingest confidential text. Live checks spend free quota; keep them to a handful of requests.
@@ -94,10 +95,10 @@ def search(body: SearchRequest, embedder: EmbedderDep, store: StoreDep) -> Searc
 - **`AppError` takes `headers=`** for things like `Retry-After`.
 - **Who is calling.** `app/api/auth.py`: `SessionDep` (cookie + CSRF; rejects API keys with 403), `PrincipalDep` (an API key, or session + `X-Workspace-ID`, for data routes), `MemberDep` (session + `{workspace_id}` path, for management routes). Check roles with `require(principal, action)`, where action is `read`, `write`, `manage` or `own`. The role table lives only in `app/services/workspaces.py` (`allowed`).
 - **Tests with `sign_in` are slower** (Argon2 on sign-up and verify): the suite takes about a minute from Task 15.
+- **Test fixtures for data routes:** `client` authenticates with an API key (`api_key` / `auth_headers` fixtures, inserted directly, no Argon2). `store` is a read-only `StoreProbe` over Postgres (`count()`, `chunk_keys(doc)`, `chunk_text(doc, i)`, `document(doc)`).
 - **Test fixtures:** `sign_in(email)` returns a verified, signed-in `TestClient`; `csrf(client)` (import from `tests.conftest`) gives its CSRF header. `anon_client` (no credentials), `app`, `outbox` (captured emails; `outbox.last(email)`), `owner_db` (autocommit connection as the owner, for backdating rows). Test settings use `cookie_secure=False`, because TestClient speaks plain HTTP.
 - **Creating extensions needs a superuser.** `docker/postgres/init.sql` and the test fixture create `vector` and `citext`; migration `0001` only runs `IF NOT EXISTS`.
 - **Docker: the container user has no home directory, so `HF_HOME` must point somewhere writable.** Without it the model download fails with `Permission denied (os error 13)`: Hugging Face's xet downloader writes a cache under `~`. The Dockerfile sets `HF_HOME=/app/data/models/.huggingface`, inside the model volume.
 - **`RequestSizeLimitMiddleware` must run inside `RequestContextMiddleware`** (added before it, since the last middleware added runs first), so 413 responses still get an `X-Request-ID`. FastAPI turns an exception raised while reading the body into its own 400; the middleware replaces that response with 413.
-- **Chroma `collection.query(n_results=0)` raises `TypeError`.** An empty collection with `n_results >= 1` returns `[[]]`, and `n_results` above the count returns what exists. `VectorStore.query` relies on this; `top_k` is validated to be at least 1.
 - **ruff 0.16 also formats Python code blocks inside Markdown.** `[tool.ruff.format] exclude = ["*.md"]` keeps doc snippets (aligned comments, `...` bodies) as written, so `ruff format --check .` in CI checks only source.
 - **`TestClient(app, raise_server_exceptions=False)`** is needed to assert on the generic 500 response.

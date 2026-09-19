@@ -20,20 +20,20 @@ def test_health_reports_state(client):
     }
 
 
-def test_health_returns_503_when_database_is_down(settings, store, embedder, llm):
+def test_health_returns_503_when_database_is_down(settings, embedder, llm):
     # Nothing listens on port 1. A short timeout keeps the test fast even where a firewall
     # silently drops the attempt instead of refusing it.
     engine = make_engine("postgresql+psycopg://nobody:nothing@127.0.0.1:1/none", connect_timeout=1)
-    app = create_app(settings, embedder=embedder, store=store, llm=llm, engine=engine)
+    app = create_app(settings, embedder=embedder, llm=llm, engine=engine)
     with TestClient(app) as c:
         r = c.get("/health")
     assert r.status_code == 503
     assert r.json() == {"detail": "Database unavailable"}
 
 
-def test_startup_fails_when_embedding_dimension_mismatches(settings, store, embedder, llm):
+def test_startup_fails_when_embedding_dimension_mismatches(settings, embedder, llm):
     settings.embedding_dim = 128
-    app = create_app(settings, embedder=embedder, store=store, llm=llm)
+    app = create_app(settings, embedder=embedder, llm=llm)
     with pytest.raises(RuntimeError, match="EMBEDDING_DIM is 128"), TestClient(app):
         pass
 

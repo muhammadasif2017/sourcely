@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, status
 
-from app.api.deps import EmbedderDep, EngineDep, SettingsDep, StoreDep
+from app.api.deps import DbDep, EmbedderDep, EngineDep, SettingsDep, StoreDep
 from app.core.errors import AppError
 from app.db.engine import database_ok
 from app.schemas.health import HealthResponse
@@ -12,7 +12,11 @@ router = APIRouter(tags=["health"])
 
 @router.get("/health", response_model=HealthResponse)
 def health(
-    settings: SettingsDep, embedder: EmbedderDep, store: StoreDep, engine: EngineDep
+    settings: SettingsDep,
+    embedder: EmbedderDep,
+    store: StoreDep,
+    engine: EngineDep,
+    db: DbDep,
 ) -> HealthResponse:
     """Report liveness, database reachability, index size and which models are configured."""
     # 503 rather than a 200 with "database: down": container health checks and load balancers
@@ -22,7 +26,7 @@ def health(
     return HealthResponse(
         status="ok",
         database="ok",
-        chunks_indexed=store.count(),
+        chunks_indexed=store.count(db),
         embedding_model=embedder.model_name,
         llm_provider=settings.llm_provider,
         llm_model=settings.llm_model,

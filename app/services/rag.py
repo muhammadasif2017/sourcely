@@ -6,7 +6,7 @@ from itertools import chain
 
 from app.services.embeddings import Embedder
 from app.services.llm import LLM, NO_ANSWER, SYSTEM_PROMPT, LLMError, build_user_prompt
-from app.services.vector_store import ChunkHit, VectorStore, Where
+from app.services.vector_store import ChunkHit, SearchFilter, WorkspaceIndex
 
 NO_CONTEXT_ANSWER = (
     "There is not enough information in the indexed documents to answer this question."
@@ -28,11 +28,11 @@ def retrieve_relevant(
     top_k: int,
     min_relevance: float,
     embedder: Embedder,
-    store: VectorStore,
-    where: Where | None = None,
+    index: WorkspaceIndex,
+    search_filter: SearchFilter | None = None,
 ) -> list[ChunkHit]:
-    """The `top_k` nearest chunks that match `where` and score at least `min_relevance`."""
-    hits = store.query(embedder.embed_query(question), top_k, where)
+    """The `top_k` nearest chunks that match the filter and score at least `min_relevance`."""
+    hits = index.query(embedder.embed_query(question), top_k, search_filter)
     return [hit for hit in hits if hit.score >= min_relevance]
 
 
@@ -41,16 +41,16 @@ def answer_question(
     top_k: int,
     min_relevance: float,
     embedder: Embedder,
-    store: VectorStore,
+    index: WorkspaceIndex,
     llm: LLM,
-    where: Where | None = None,
+    search_filter: SearchFilter | None = None,
 ) -> RagAnswer:
     """Answer from retrieved context. Raises `LLMError` when the provider fails.
 
     When no chunk is relevant enough, the LLM is not called at all: it saves the cost, and it
     avoids a confident answer built on unrelated text.
     """
-    sources = retrieve_relevant(question, top_k, min_relevance, embedder, store, where)
+    sources = retrieve_relevant(question, top_k, min_relevance, embedder, index, search_filter)
     if not sources:
         return RagAnswer(NO_CONTEXT_ANSWER, [], llm.provider, llm.model)
     result = llm.complete(SYSTEM_PROMPT, build_user_prompt(question, sources))
@@ -72,9 +72,9 @@ def start_answer_stream(
     top_k: int,
     min_relevance: float,
     embedder: Embedder,
-    store: VectorStore,
+    index: WorkspaceIndex,
     llm: LLM,
-    where: Where | None = None,
+    search_filter: SearchFilter | None = None,
 ) -> RagStream:
     """Retrieve context and start streaming the answer.
 
@@ -82,7 +82,7 @@ def start_answer_stream(
     key, a rejected request, a rate limit or a timeout therefore raises `LLMError` now and can
     still become a normal HTTP error. Only failures after the first token happen mid-stream.
     """
-    sources = retrieve_relevant(question, top_k, min_relevance, embedder, store, where)
+    sources = retrieve_relevant(question, top_k, min_relevance, embedder, index, search_filter)
     if not sources:
         return RagStream([], llm.provider, llm.model, iter([NO_CONTEXT_ANSWER]))
     tokens = llm.stream(SYSTEM_PROMPT, build_user_prompt(question, sources))

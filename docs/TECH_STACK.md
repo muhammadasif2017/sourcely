@@ -189,6 +189,8 @@ Related docs: [`BUILD_LOG.md`](BUILD_LOG.md) (how it was built) and [`INTERVIEW_
 
 ## 7. ChromaDB (vector database)
 
+> **Replaced in Phase 1 (Task 16).** Sourcely now stores vectors in PostgreSQL with pgvector (section 21). This section explains the PoC choice, which is still a good answer to "why start with an embedded store?".
+
 **What it is.** An open-source vector database (Apache-2.0). It stores embeddings with their text and metadata, and finds the nearest vectors to a query.
 
 **Problem it solves.** Semantic search means finding the chunks whose embeddings are closest to the query embedding. Doing this by brute force in Python doesn't scale and has no persistence or filtering.
@@ -457,6 +459,8 @@ It has already caught a real issue: a function declared to return `list[float]` 
 **Why chosen over keeping Chroma plus a separate database.** Two stores can disagree after a crash, need two backups, and row-level security can't cover Chroma. Decision D3 in `docs/product/ARCHITECTURE.md` has the full comparison.
 
 **Where used.** The `db` service in `docker-compose.yml` (`pgvector/pgvector:pg17`, host port 5434), the CI service container, and the per-run test database.
+
+From Task 16 it also stores every document and chunk: `app/services/vector_store.py` (`PgVectorStore`), the `documents` and `chunks` tables with an HNSW index (`vector_cosine_ops`), and row-level security policies in migration `0005`. It replaced ChromaDB after a parity check gave identical scores (see `SPEC.md`).
 
 **Limitations.** Tests now need a running Postgres. pgvector's HNSW index is approximate, like Chroma's, and holds its graph in memory.
 

@@ -37,13 +37,12 @@ COPY migrations ./migrations
 
 # Named volumes mount here (see docker-compose.yml). Creating the directories as the
 # sourcely user makes new volumes inherit that ownership.
-RUN mkdir -p /app/data/chroma /app/data/models && chown -R sourcely:sourcely /app/data
+RUN mkdir -p /app/data/models && chown -R sourcely:sourcely /app/data
 
 # HF_HOME: the model download (Hugging Face, via fastembed) keeps its own cache under the
 # user's home by default. This user has no home directory, so it goes in the model volume.
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
-    CHROMA_PATH=/app/data/chroma \
     EMBEDDING_CACHE_DIR=/app/data/models \
     HF_HOME=/app/data/models/.huggingface
 

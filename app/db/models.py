@@ -7,17 +7,19 @@ Phase 1 adds tables task by task: accounts (Task 13), workspaces (Task 14), API 
 import uuid
 from datetime import datetime
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     LargeBinary,
     String,
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import CITEXT
+from sqlalchemy.dialects.postgresql import CITEXT, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -137,3 +139,55 @@ class ApiKey(Base):
     created_at: Mapped[datetime] = _now_column()
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+# The embedding column's size. Must equal Settings.embedding_dim, which startup checks against
+# the model; changing it means a migration that rebuilds the column.
+EMBEDDING_DIM = 384
+
+
+class Document(Base):
+    """A document in a workspace. Its text lives in its chunks.
+
+    Row-level security (migration 0005) limits every query to the workspace named in the
+    `app.workspace_id` setting of the current transaction.
+    """
+
+    __tablename__ = "documents"
+
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), primary_key=True
+    )
+    # The PoC id rule (^[A-Za-z0-9._-]{1,128}$); unique per workspace, not globally.
+    document_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    title: Mapped[str] = mapped_column(String(200))
+    metadata_: Mapped[dict[str, str | int | float | bool]] = mapped_column(
+        "metadata", JSONB, server_default=text("'{}'::jsonb")
+    )
+    created_at: Mapped[datetime] = _now_column()
+    updated_at: Mapped[datetime] = _now_column()
+
+
+class Chunk(Base):
+    """One chunk of a document, with its embedding."""
+
+    __tablename__ = "chunks"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["workspace_id", "document_id"],
+            ["documents.workspace_id", "documents.document_id"],
+            ondelete="CASCADE",
+        ),
+        Index(
+            "ix_chunks_embedding_hnsw",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
+    )
+
+    workspace_id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
+    document_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    chunk_index: Mapped[int] = mapped_column(primary_key=True)
+    text: Mapped[str]
+    embedding: Mapped[list[float]] = mapped_column(Vector(EMBEDDING_DIM))

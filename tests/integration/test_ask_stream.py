@@ -122,9 +122,9 @@ def test_unexpected_mid_stream_failure_sends_generic_error(client, llm):
     assert events[-1] == ("error", {"detail": "The answer was interrupted"})
 
 
-def test_missing_key_returns_503(settings, store, embedder):
+def test_missing_key_returns_503(settings, embedder, auth_headers):
     settings.openai_api_key = None
-    with TestClient(create_app(settings, embedder=embedder, store=store)) as c:
+    with TestClient(create_app(settings, embedder=embedder), headers=auth_headers) as c:
         r = c.post("/ask/stream", json={"question": "why do cats purr"})
         assert r.status_code == 503
         assert r.json() == {"detail": "LLM provider not configured"}

@@ -5,7 +5,6 @@ import re
 import uuid
 from collections.abc import Callable, Iterator
 
-import chromadb
 import pytest
 from alembic import command
 from alembic.config import Config
@@ -15,10 +14,11 @@ from sqlalchemy import Connection, create_engine, make_url, text
 from sqlalchemy.exc import OperationalError
 
 from app.core.config import Settings
+from app.core.security import hash_token
 from app.main import create_app
+from app.services.api_keys import generate_key
 from app.services.email import EmailMessage
 from app.services.llm import LLMAnswer
-from app.services.vector_store import VectorStore
 
 # Must equal the vector column size, which is fixed by the migration (EMBEDDING_DIM).
 DIM = 384
@@ -200,10 +200,49 @@ def settings(clean_database) -> Settings:
     )
 
 
+class StoreProbe:
+    """Reads stored documents and chunks directly, as the owner (bypassing row-level security).
+
+    For asserting what ingestion wrote. Tests that use one API key see one workspace, so
+    lookups by document id are unambiguous.
+    """
+
+    def __init__(self, connection: Connection) -> None:
+        self._db = connection
+
+    def count(self) -> int:
+        """Chunks stored in every workspace."""
+        return int(self._db.execute(text("SELECT count(*) FROM chunks")).scalar_one())
+
+    def chunk_keys(self, document_id: str) -> list[str]:
+        """`document_id:chunk_index` for each stored chunk of the document, in order."""
+        indexes = self._db.execute(
+            text("SELECT chunk_index FROM chunks WHERE document_id = :d ORDER BY chunk_index"),
+            {"d": document_id},
+        ).scalars()
+        return [f"{document_id}:{i}" for i in indexes]
+
+    def chunk_text(self, document_id: str, chunk_index: int) -> str:
+        """The text of one stored chunk."""
+        return str(
+            self._db.execute(
+                text("SELECT text FROM chunks WHERE document_id = :d AND chunk_index = :i"),
+                {"d": document_id, "i": chunk_index},
+            ).scalar_one()
+        )
+
+    def document(self, document_id: str) -> dict[str, object]:
+        """The stored document row: title and metadata."""
+        row = self._db.execute(
+            text("SELECT title, metadata FROM documents WHERE document_id = :d"),
+            {"d": document_id},
+        ).one()
+        return {"title": row.title, "metadata": row.metadata}
+
+
 @pytest.fixture
-def store() -> VectorStore:
-    # Ephemeral clients share one in-process database, so each test needs its own collection.
-    return VectorStore(chromadb.EphemeralClient(), f"test-{uuid.uuid4().hex}")
+def store(owner_db) -> StoreProbe:
+    return StoreProbe(owner_db)
 
 
 @pytest.fixture
@@ -231,8 +270,40 @@ def owner_db(clean_database) -> Iterator[Connection]:
 
 
 @pytest.fixture
-def app(settings, store, embedder, llm, outbox) -> FastAPI:
-    return create_app(settings, embedder=embedder, store=store, llm=llm, email_sender=outbox)
+def app(settings, embedder, llm, outbox) -> FastAPI:
+    return create_app(settings, embedder=embedder, llm=llm, email_sender=outbox)
+
+
+@pytest.fixture
+def api_key(owner_db) -> dict[str, str]:
+    """A workspace and an API key for it, inserted directly (no sign-up, so no Argon2 cost).
+
+    Returns the key, its workspace id, and ready-made request headers.
+    """
+    workspace_id = uuid.uuid4()
+    key = generate_key()
+    owner_db.execute(
+        text("INSERT INTO workspaces (id, name) VALUES (:id, 'Test workspace')"),
+        {"id": workspace_id},
+    )
+    owner_db.execute(
+        text(
+            "INSERT INTO api_keys (id, workspace_id, name, prefix, key_hash) "
+            "VALUES (:id, :w, 'Test key', :prefix, :hash)"
+        ),
+        {"id": uuid.uuid4(), "w": workspace_id, "prefix": key[:12], "hash": hash_token(key)},
+    )
+    return {
+        "key": key,
+        "workspace_id": str(workspace_id),
+        "Authorization": f"Bearer {key}",
+    }
+
+
+@pytest.fixture
+def auth_headers(api_key) -> dict[str, str]:
+    """Headers that authenticate as the `api_key` fixture's key."""
+    return {"Authorization": api_key["Authorization"]}
 
 
 @pytest.fixture
@@ -243,8 +314,9 @@ def anon_client(app) -> Iterator[TestClient]:
 
 
 @pytest.fixture
-def client(app) -> Iterator[TestClient]:
-    with TestClient(app) as c:
+def client(app, auth_headers) -> Iterator[TestClient]:
+    """A client that authenticates every request with an API key (editor in its workspace)."""
+    with TestClient(app, headers=auth_headers) as c:
         yield c
 
 

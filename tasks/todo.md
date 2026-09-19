@@ -153,7 +153,7 @@ Source of truth: `SPEC.md`, section "Phase 1". Every task keeps the Definition o
   - Verify: unit tests for key generation and hashing; API tests.
   - Files: `app/services/api_keys.py`, `app/api/routes/api_keys.py`, `app/api/auth.py`, `migrations/versions/0004_*`, `tests/`
 
-- [ ] **Task 16: Tenant data on pgvector** (L)
+- [x] **Task 16: Tenant data on pgvector** (L)
   - Acceptance:
     - Tables `documents` and `chunks` (`vector(384)`, HNSW cosine index) with row-level security; the API sets `app.workspace_id` per request.
     - `PgVectorStore` implements the store interface with `workspace_id`; filters use `ANY` and JSONB containment; filtered searches still return up to `top_k`; replace is one transaction.

@@ -7,9 +7,10 @@ LIMIT = 4096
 
 
 @pytest.fixture
-def limited(settings, store, embedder, llm):
+def limited(settings, embedder, llm, auth_headers):
     settings.max_request_bytes = LIMIT
-    with TestClient(create_app(settings, embedder=embedder, store=store, llm=llm)) as c:
+    app = create_app(settings, embedder=embedder, llm=llm)
+    with TestClient(app, headers=auth_headers) as c:
         yield c
 
 

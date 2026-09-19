@@ -5,7 +5,7 @@ from typing import Annotated
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
 from app.schemas.documents import DOCUMENT_ID_PATTERN, MetadataValue, check_metadata_keys
-from app.services.vector_store import ChunkHit
+from app.services.vector_store import ChunkHit, SearchFilter
 
 MAX_QUERY_CHARS = 2000
 MAX_TOP_K = 20
@@ -34,6 +34,13 @@ class SearchFilters(BaseModel):
         if metadata is None:
             return None
         return check_metadata_keys(metadata, MAX_FILTER_METADATA_PAIRS)
+
+    def to_filter(self) -> SearchFilter:
+        """The store's filter for these request fields."""
+        return SearchFilter(
+            document_ids=tuple(self.document_ids) if self.document_ids else None,
+            metadata=self.metadata or None,
+        )
 
 
 class SearchRequest(BaseModel):

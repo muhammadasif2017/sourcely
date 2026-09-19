@@ -11,12 +11,13 @@ import statistics
 import sys
 import uuid
 
-import chromadb
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.services.chunking import chunk_text
 from app.services.embeddings import FastEmbedEmbedder
-from app.services.vector_store import VectorStore
+from app.services.vector_store import PgVectorStore, WorkspaceIndex, set_workspace
 
 DOCS = {
     "leave": "Leave policy 2026. Full-time employees get 21 days of paid annual leave per year. "
@@ -74,10 +75,33 @@ PREFIX = "Represent this sentence for searching relevant passages: "
 def main() -> None:
     settings = Settings()
     embedder = FastEmbedEmbedder(settings.embedding_model, settings.embedding_cache_dir)
-    store = VectorStore(chromadb.EphemeralClient(), f"cal-{uuid.uuid4().hex}")
-    for doc_id, text in DOCS.items():
-        chunks = chunk_text(text, settings.chunk_size, settings.chunk_overlap)
-        store.replace_document(doc_id, chunks, embedder.embed_documents(chunks), {}, doc_id)
+    # A throwaway workspace in the development database: created as the owner, used through
+    # PgVectorStore as the app role (like the API), deleted at the end with everything in it.
+    owner = create_engine(settings.migration_database_url)
+    app = create_engine(settings.database_url)
+    workspace_id = uuid.uuid4()
+    with owner.begin() as connection:
+        connection.execute(
+            text("INSERT INTO workspaces (id, name) VALUES (:id, 'calibration')"),
+            {"id": workspace_id},
+        )
+    db = Session(app)
+    db.begin()
+    set_workspace(db, workspace_id)
+    store = WorkspaceIndex(store=PgVectorStore(), db=db, workspace_id=workspace_id)
+    try:
+        for doc_id, document in DOCS.items():
+            chunks = chunk_text(document, settings.chunk_size, settings.chunk_overlap)
+            store.replace_document(doc_id, chunks, embedder.embed_documents(chunks), {}, doc_id)
+        _measure(embedder, store)
+    finally:
+        db.rollback()
+        db.close()
+        with owner.begin() as connection:
+            connection.execute(text("DELETE FROM workspaces WHERE id = :id"), {"id": workspace_id})
+
+
+def _measure(embedder: FastEmbedEmbedder, store: WorkspaceIndex) -> None:
 
     for label, prefix in (("plain", ""), ("prefix", PREFIX)):
         right, wrong_best, unans_best, misses = [], [], [], []

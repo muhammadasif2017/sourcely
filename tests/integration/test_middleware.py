@@ -18,8 +18,8 @@ def test_unsafe_incoming_request_id_is_replaced(client):
     assert r.headers["X-Request-ID"] != "bad id\twith spaces"
 
 
-def test_unhandled_error_returns_generic_500(settings, store, embedder):
-    app = create_app(settings, embedder=embedder, store=store)
+def test_unhandled_error_returns_generic_500(settings, embedder):
+    app = create_app(settings, embedder=embedder)
 
     @app.get("/boom")
     def boom() -> None:

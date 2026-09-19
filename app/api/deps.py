@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings
 from app.services.embeddings import Embedder
 from app.services.llm import LLM
-from app.services.vector_store import VectorStore
+from app.services.vector_store import PgVectorStore
 
 
 def get_settings(request: Request) -> Settings:
@@ -25,9 +25,9 @@ def get_embedder(request: Request) -> Embedder:
     return embedder
 
 
-def get_store(request: Request) -> VectorStore:
+def get_store(request: Request) -> PgVectorStore:
     """The vector store."""
-    store: VectorStore = request.app.state.store
+    store: PgVectorStore = request.app.state.store
     return store
 
 
@@ -54,7 +54,7 @@ def get_llm(request: Request) -> LLM | None:
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 EmbedderDep = Annotated[Embedder, Depends(get_embedder)]
-StoreDep = Annotated[VectorStore, Depends(get_store)]
+StoreDep = Annotated[PgVectorStore, Depends(get_store)]
 LLMDep = Annotated[LLM | None, Depends(get_llm)]
 EngineDep = Annotated[Engine, Depends(get_engine)]
 DbDep = Annotated[Session, Depends(get_db)]

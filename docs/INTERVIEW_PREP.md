@@ -460,3 +460,26 @@ These answers describe the product plan in [`docs/product/`](product/README.md).
 **Q: Why don't API key requests need a CSRF token?**
 
 > CSRF works because browsers attach cookies to a request automatically, even when another site triggers it. An API key is only sent by the program that holds it, in an `Authorization` header, so a forged cross-site request can't include it. A request with both a cookie and a key is rejected with 400, so it's never ambiguous which rules apply.
+---
+
+## 17. Phase 1: isolating tenants on pgvector (Task 16)
+
+**Q: How do you make sure one workspace can never see another's documents?**
+
+> Three layers. The request resolves exactly one workspace, from the API key or the session plus a header. Every store method takes that workspace id and filters by it. And Postgres row-level security filters again underneath: each request sets `app.workspace_id` on its transaction, and a policy only shows rows with that workspace. The app connects as a role that doesn't own the tables, because owners bypass RLS. If the setting is missing, the policy matches nothing, so a bug hides data rather than leaking it.
+
+**Q: How do you test isolation, and how do you stop a new route from skipping it?**
+
+> Two ways. At the database level, raw `SELECT`s with no `WHERE` clause, run as the app role with another workspace set, return zero rows. At the HTTP level, a test walks the route table, finds every route that depends on the Principal, and requires a cross-tenant case for each: workspace B tries to list, search, ask, stream, create and delete, and must see and change nothing of A's. A new route without a case fails the suite. The first version of that test passed for the wrong reason: FastAPI 0.141 nests included routers, so discovery found nothing. Now a separate test checks discovery finds known routes.
+
+**Q: Why use `set_config(..., true)` rather than a plain `SET`?**
+
+> The `true` makes it transaction-local. The connection goes back to the pool afterwards, and a plain `SET` would leave the previous request's workspace on it. A test runs two transactions on the same connection and checks the second sees nothing.
+
+**Q: How did you switch vector stores without breaking relevance?**
+
+> The `VectorStore` operations stayed the same and the score stayed `1 - cosine distance`. Before removing Chroma, I reran the calibration script on pgvector: every score matched to three decimals, so `MIN_RELEVANCE = 0.58` still separated the answerable and unanswerable questions exactly. Only then did I remove the dependency.
+
+**Q: What's the catch with filtered vector search?**
+
+> An approximate index like HNSW gathers a fixed set of candidates and then applies the filter, so a strict filter can return fewer than `top_k` results even when matching rows exist. pgvector 0.8 has iterative index scans, which keep searching until enough rows pass the filter. I have a test with 60 close non-matching chunks and 5 matching ones that still gets 4 results.

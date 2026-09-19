@@ -6,7 +6,8 @@ from typing import Annotated
 
 from fastapi import APIRouter, File, Form, Path, Response, UploadFile, status
 
-from app.api.deps import EmbedderDep, SettingsDep, StoreDep
+from app.api.auth import IndexDep, PrincipalDep, require
+from app.api.deps import EmbedderDep, SettingsDep
 from app.core.config import Settings
 from app.core.errors import AppError
 from app.schemas.documents import (
@@ -19,7 +20,7 @@ from app.schemas.documents import (
 )
 from app.services.embeddings import Embedder
 from app.services.ingestion import ingest_text
-from app.services.vector_store import Metadata, VectorStore
+from app.services.vector_store import Metadata, WorkspaceIndex
 
 router = APIRouter(tags=["documents"])
 
@@ -30,17 +31,23 @@ _MAX_BYTES_PER_CHAR = 4
 
 @router.post("/documents", response_model=DocumentCreated, status_code=status.HTTP_201_CREATED)
 def create_document(
-    body: DocumentCreate, settings: SettingsDep, embedder: EmbedderDep, store: StoreDep
+    body: DocumentCreate,
+    settings: SettingsDep,
+    embedder: EmbedderDep,
+    principal: PrincipalDep,
+    index: IndexDep,
 ) -> DocumentCreated:
     """Chunk, embed and store a text document. Re-using an id replaces that document."""
+    require(principal, "write")
     return _ingest(
-        body.text, body.document_id, body.title or "", body.metadata, settings, embedder, store
+        body.text, body.document_id, body.title or "", body.metadata, settings, embedder, index
     )
 
 
 @router.get("/documents", response_model=DocumentList)
-def list_documents(store: StoreDep) -> DocumentList:
-    """List stored documents with their title, chunk count and metadata, sorted by id."""
+def list_documents(principal: PrincipalDep, index: IndexDep) -> DocumentList:
+    """List the workspace's documents with their title, chunk count and metadata, by id."""
+    require(principal, "read")
     return DocumentList(
         documents=[
             DocumentSummary(
@@ -49,17 +56,20 @@ def list_documents(store: StoreDep) -> DocumentList:
                 chunks=doc.chunks,
                 metadata=doc.metadata,
             )
-            for doc in store.list_documents()
+            for doc in index.list_documents()
         ]
     )
 
 
 @router.delete("/documents/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_document(
-    document_id: Annotated[str, Path(pattern=DOCUMENT_ID_PATTERN)], store: StoreDep
+    document_id: Annotated[str, Path(pattern=DOCUMENT_ID_PATTERN)],
+    principal: PrincipalDep,
+    index: IndexDep,
 ) -> Response:
     """Delete a document and all its chunks, so it no longer appears in search or answers."""
-    if not store.delete_document(document_id):
+    require(principal, "write")
+    if not index.delete_document(document_id):
         raise AppError(status.HTTP_404_NOT_FOUND, f"Document '{document_id}' not found")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -71,10 +81,12 @@ def upload_document(
     file: Annotated[UploadFile, File(description="A UTF-8 `.txt` or `.md` file")],
     settings: SettingsDep,
     embedder: EmbedderDep,
-    store: StoreDep,
+    principal: PrincipalDep,
+    index: IndexDep,
     document_id: Annotated[str | None, Form(pattern=DOCUMENT_ID_PATTERN)] = None,
 ) -> DocumentCreated:
     """Ingest a `.txt` or `.md` file. The file name becomes the title."""
+    require(principal, "write")
     # PureWindowsPath splits on both "\\" and "/", so any client-side path is dropped.
     filename = PureWindowsPath(file.filename or "").name
     if not filename.lower().endswith(UPLOAD_EXTENSIONS):
@@ -98,7 +110,7 @@ def upload_document(
         raise AppError(
             status.HTTP_422_UNPROCESSABLE_CONTENT, "File must contain non-whitespace characters"
         )
-    return _ingest(text, document_id, filename[:MAX_TITLE_CHARS], {}, settings, embedder, store)
+    return _ingest(text, document_id, filename[:MAX_TITLE_CHARS], {}, settings, embedder, index)
 
 
 def _ingest(
@@ -108,7 +120,7 @@ def _ingest(
     metadata: Metadata,
     settings: Settings,
     embedder: Embedder,
-    store: VectorStore,
+    index: WorkspaceIndex,
 ) -> DocumentCreated:
     """Apply the size limit, then store the document under the given or a generated id."""
     characters = len(text)
@@ -123,7 +135,7 @@ def _ingest(
         chunk_size=settings.chunk_size,
         chunk_overlap=settings.chunk_overlap,
         embedder=embedder,
-        store=store,
+        index=index,
     )
     return DocumentCreated(
         document_id=document_id, title=title, chunks=chunks, characters=characters

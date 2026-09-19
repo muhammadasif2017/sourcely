@@ -77,10 +77,10 @@ def test_sources_respect_top_k(client, llm):
     assert body["sources"][0]["score"] >= body["sources"][1]["score"]
 
 
-def test_missing_key_returns_503(settings, store, embedder):
+def test_missing_key_returns_503(settings, embedder, auth_headers):
     settings.openai_api_key = None
-    app = create_app(settings, embedder=embedder, store=store)
-    with TestClient(app) as c:
+    app = create_app(settings, embedder=embedder)
+    with TestClient(app, headers=auth_headers) as c:
         r = c.post("/ask", json={"question": "why do cats purr"})
         assert r.status_code == 503
         assert r.json() == {"detail": "LLM provider not configured"}

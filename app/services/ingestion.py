@@ -2,7 +2,7 @@
 
 from app.services.chunking import chunk_text
 from app.services.embeddings import Embedder
-from app.services.vector_store import Metadata, VectorStore
+from app.services.vector_store import Metadata, WorkspaceIndex
 
 
 def ingest_text(
@@ -14,11 +14,11 @@ def ingest_text(
     chunk_size: int,
     chunk_overlap: int,
     embedder: Embedder,
-    store: VectorStore,
+    index: WorkspaceIndex,
 ) -> int:
     """Chunk, embed and store `text`, replacing any earlier version. Returns the chunk count."""
     chunks = chunk_text(text, chunk_size, chunk_overlap)
     # Embed before touching the store, so a failure here keeps the previous version intact.
     embeddings = embedder.embed_documents(chunks)
-    store.replace_document(document_id, chunks, embeddings, metadata, title)
+    index.replace_document(document_id, chunks, embeddings, metadata, title)
     return len(chunks)

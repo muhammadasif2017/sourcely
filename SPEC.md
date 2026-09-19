@@ -363,7 +363,7 @@ Tables used to *find* the workspace (`sessions`, `memberships`, `api_keys`, `inv
 | `invites` | `id` PK, `workspace_id` FK, `email`, `role`, `token_hash`, `invited_by`, `expires_at`, `accepted_at` |
 | `api_keys` | `id` PK, `workspace_id` FK, `name`, `prefix` (first 12 characters), `key_hash`, `created_by`, `created_at`, `last_used_at`, `revoked_at` |
 | `documents` | PK (`workspace_id`, `document_id`), `title`, `metadata` jsonb, `created_at`, `updated_at`. `document_id` keeps the PoC pattern and is unique per workspace. |
-| `chunks` | `id` PK, `workspace_id`, `document_id` (FK to `documents`, cascade delete), `chunk_index`, `text`, `embedding` `vector(384)` with an HNSW index (`vector_cosine_ops`) |
+| `chunks` | PK (`workspace_id`, `document_id`, `chunk_index`), FK (`workspace_id`, `document_id`) to `documents` with cascade delete, `text`, `embedding` `vector(384)` with an HNSW index (`vector_cosine_ops`) |
 
 Deleting a workspace cascades to its memberships, invites, API keys, documents and chunks. `GET /documents` now reads the `documents` table, which removes the PoC's O(chunks) listing cost.
 
@@ -375,6 +375,8 @@ Deleting a workspace cascades to its memberships, invites, API keys, documents a
 - **Filters.** `document_ids` become `document_id = ANY(...)`. Each metadata pair becomes JSONB containment (`metadata @> {"key": value}`), which keeps exact, typed matching: `2026` and `"2026"` still differ.
 - **Filtered searches still return up to `top_k` matches.** Queries use pgvector's iterative index scan (`hnsw.iterative_scan`), or an exact scan, so a filter can't empty the result when matching chunks exist further down.
 - **Replace is atomic.** Deleting a document's old chunks and inserting the new ones happen in one transaction, which closes the PoC's "not fully atomic" gap.
+- **Settled in Task 16.** The policy compares `workspace_id` with `NULLIF(current_setting('app.workspace_id', true), '')::uuid`: on a pooled connection a finished `set_config(..., true)` leaves an empty string, not NULL, and `''::uuid` would be an error. `/health` counts chunks through `chunk_count()`, a `SECURITY DEFINER` function owned by `sourcely_owner` that returns only the number. Routes get the store through `IndexDep`, which sets the workspace on the transaction and returns a `WorkspaceIndex` bound to it.
+- **Parity gate: passed on 2026-09-19.** `scripts/calibrate.py` on `PgVectorStore` gave the same scores as Chroma to three decimals for all 22 questions: top-1 13 of 14, and at `MIN_RELEVANCE = 0.58` with the prefix, 14 of 14 kept and 8 of 8 blocked. The threshold is unchanged, and `chromadb` was removed.
 - **Parity gate before Chroma is removed.** `scripts/calibrate.py` runs against `PgVectorStore` and must give the same outcome as Chroma: top-1 13 of 14, and at `MIN_RELEVANCE = 0.58` all 14 answerable questions kept and all 8 unanswerable ones blocked. If not, the threshold is recalibrated and this section updated before continuing.
 
 ## Authentication
@@ -468,7 +470,7 @@ Workspace management endpoints take the workspace from the path, not from `X-Wor
 | `EMAIL_BACKEND` | `console` |
 | `APP_BASE_URL` | `http://localhost:8000`, used to build links in emails |
 
-`CHROMA_PATH` and `COLLECTION_NAME` are removed with Chroma.
+`CHROMA_PATH` and `COLLECTION_NAME` were removed with Chroma in Task 16.
 
 ## Testing
 

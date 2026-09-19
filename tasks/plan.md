@@ -99,7 +99,7 @@ Approved 2026-09-19 with decisions D1 (own auth), D2 (PostgreSQL) and D3 (pgvect
 - [x] Task 13: Accounts and sessions
 - [x] Task 14: Workspaces, roles and the Principal
 - [x] Task 15: API keys
-- [ ] Task 16: Tenant data on pgvector
+- [x] Task 16: Tenant data on pgvector
 
 ### Checkpoint E: isolation (human review)
 - [ ] Isolation proven at the HTTP and database levels; parity gate passed.

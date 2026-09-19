@@ -8,8 +8,8 @@ from typing import Any
 from fastapi import APIRouter, status
 from fastapi.responses import StreamingResponse
 
-from app.api.deps import EmbedderDep, LLMDep, SettingsDep, StoreDep
-from app.api.routes.search import where_from
+from app.api.auth import IndexDep, PrincipalDep, require
+from app.api.deps import EmbedderDep, LLMDep, SettingsDep
 from app.core.errors import AppError
 from app.schemas.ask import AskRequest, AskResponse
 from app.schemas.search import SearchHit
@@ -28,10 +28,12 @@ def ask(
     body: AskRequest,
     settings: SettingsDep,
     embedder: EmbedderDep,
-    store: StoreDep,
+    principal: PrincipalDep,
+    index: IndexDep,
     llm: LLMDep,
 ) -> AskResponse:
     """Answer a question from the stored documents, citing the sources used as [n]."""
+    require(principal, "read")
     configured = _require(llm)
     try:
         result = answer_question(
@@ -39,9 +41,9 @@ def ask(
             body.top_k or settings.default_top_k,
             settings.min_relevance,
             embedder,
-            store,
+            index,
             configured,
-            where_from(body.filters),
+            body.filters.to_filter() if body.filters else None,
         )
     except LLMError as exc:
         raise AppError(exc.status_code, exc.detail) from exc
@@ -62,7 +64,8 @@ def ask_stream(
     body: AskRequest,
     settings: SettingsDep,
     embedder: EmbedderDep,
-    store: StoreDep,
+    principal: PrincipalDep,
+    index: IndexDep,
     llm: LLMDep,
 ) -> StreamingResponse:
     """Stream the answer as Server-Sent Events: `sources`, then `token` events, then `done`.
@@ -70,6 +73,7 @@ def ask_stream(
     Errors before the first token return a normal HTTP status. An error after it arrives as an
     `error` event, because the 200 status has already been sent.
     """
+    require(principal, "read")
     configured = _require(llm)
     try:
         stream = start_answer_stream(
@@ -77,9 +81,9 @@ def ask_stream(
             body.top_k or settings.default_top_k,
             settings.min_relevance,
             embedder,
-            store,
+            index,
             configured,
-            where_from(body.filters),
+            body.filters.to_filter() if body.filters else None,
         )
     except LLMError as exc:
         raise AppError(exc.status_code, exc.detail) from exc
