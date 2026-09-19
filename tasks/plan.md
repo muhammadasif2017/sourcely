@@ -108,7 +108,7 @@ Approved 2026-09-19 with decisions D1 (own auth), D2 (PostgreSQL) and D3 (pgvect
 - [x] Task 18: Compose, docs and live verification
 
 ### Checkpoint F: Phase 1 complete
-- [ ] Every Phase 1 success criterion in `SPEC.md` has evidence.
+- [x] Every Phase 1 success criterion in `SPEC.md` has evidence. Approved 2026-09-19.
 
 ### Risks
 

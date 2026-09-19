@@ -185,4 +185,4 @@ Source of truth: `SPEC.md`, section "Phase 1". Every task keeps the Definition o
   - Files: `docker-compose.yml`, `Dockerfile`, `README.md`, docs
 
 ### Checkpoint F
-- [ ] Phase 1 complete. Ready for review.
+- [x] Phase 1 complete. Reviewed and approved by the owner on 2026-09-19, after re-running every criterion.
