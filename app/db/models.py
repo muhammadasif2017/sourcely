@@ -115,3 +115,25 @@ class Membership(Base):
     )
     role: Mapped[str] = mapped_column(String(16))
     created_at: Mapped[datetime] = _now_column()
+
+
+class ApiKey(Base):
+    """A workspace's API key. Only its SHA-256 and its first 12 characters are stored."""
+
+    __tablename__ = "api_keys"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(60))
+    # Shown in lists so people can tell keys apart, e.g. "sk_live_7Hq2".
+    prefix: Mapped[str] = mapped_column(String(12))
+    key_hash: Mapped[bytes] = mapped_column(LargeBinary, unique=True)
+    # Kept when the creator leaves: the key belongs to the workspace, not the person.
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = _now_column()
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

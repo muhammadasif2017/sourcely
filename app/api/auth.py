@@ -1,6 +1,7 @@
-"""Who is calling: the session cookie and CSRF check, cookies, and the per-request `Principal`.
+"""Who is calling: session cookies and CSRF, API keys, and the per-request `Principal`.
 
-Task 15 adds API keys as a second way to become a `Principal`.
+A `Principal` comes from either a browser session (plus `X-Workspace-ID`) or an API key
+(`Authorization: Bearer sk_live_...`), never both.
 """
 
 import secrets
@@ -16,7 +17,7 @@ from app.api.deps import DbDep, SettingsDep
 from app.core.config import Settings
 from app.core.errors import AppError
 from app.db.models import AuthSession, User
-from app.services import accounts, workspaces
+from app.services import accounts, api_keys, workspaces
 from app.services.accounts import NewSession
 from app.services.workspaces import Action, allowed
 
@@ -24,6 +25,13 @@ SESSION_COOKIE = "sourcely_session"
 CSRF_COOKIE = "sourcely_csrf"
 CSRF_HEADER = "X-CSRF-Token"
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+KEY_NOT_ALLOWED = "This needs a signed-in user; API keys can't be used here"
+
+
+def _bearer_token(request: Request) -> str | None:
+    """The token of an `Authorization: Bearer ...` header, or None if there's no such header."""
+    scheme, _, value = request.headers.get("Authorization", "").partition(" ")
+    return value.strip() if scheme.lower() == "bearer" else None
 
 
 @dataclass(frozen=True)
@@ -37,8 +45,11 @@ class CurrentSession:
 def get_current_session(request: Request, db: DbDep, settings: SettingsDep) -> CurrentSession:
     """Resolve the session cookie, and check CSRF on anything that can change data.
 
-    401 without a valid session; 403 when a write lacks the matching `X-CSRF-Token`.
+    401 without a valid session; 403 when a write lacks the matching `X-CSRF-Token`, and 403 for
+    an API key, which can't act as a person (`/me`, managing workspaces, members or keys).
     """
+    if _bearer_token(request) is not None:
+        raise AppError(status.HTTP_403_FORBIDDEN, KEY_NOT_ALLOWED)
     token = request.cookies.get(SESSION_COOKIE)
     resolved = accounts.resolve_session(db, token, settings.session_idle_days) if token else None
     if resolved is None:
@@ -126,11 +137,34 @@ def _membership_principal(db: Session, workspace_id: uuid.UUID, user: User) -> P
     )
 
 
-def get_principal(request: Request, current: SessionDep, db: DbDep) -> Principal:
-    """The caller of a workspace data request: the session plus the `X-Workspace-ID` header.
+def _key_principal(request: Request, db: Session, token: str) -> Principal:
+    """The principal for an API key: its own workspace, with the editor role."""
+    if request.cookies.get(SESSION_COOKIE):
+        raise AppError(
+            status.HTTP_400_BAD_REQUEST, "Send either a session cookie or an API key, not both"
+        )
+    key = api_keys.resolve_key(db, token)
+    if key is None:
+        raise AppError(status.HTTP_401_UNAUTHORIZED, "Invalid or revoked API key")
+    # A key belongs to one workspace, so the header is optional; if sent, it must agree.
+    header = request.headers.get(WORKSPACE_HEADER)
+    if header and header.strip().lower() != str(key.workspace_id):
+        raise AppError(
+            status.HTTP_400_BAD_REQUEST, f"{WORKSPACE_HEADER} doesn't match the API key's workspace"
+        )
+    return Principal(user_id=None, api_key_id=key.id, workspace_id=key.workspace_id, role="editor")
 
-    401 without a session, 400 without the header, 404 for a workspace the user isn't in.
+
+def get_principal(request: Request, db: DbDep, settings: SettingsDep) -> Principal:
+    """The caller of a workspace data request: an API key, or a session plus `X-Workspace-ID`.
+
+    401 without a valid credential, 400 for a cookie and a key together or for a session
+    request without the header, 404 for a workspace the user isn't in.
     """
+    token = _bearer_token(request)
+    if token is not None:
+        return _key_principal(request, db, token)
+    current = get_current_session(request, db, settings)
     header = request.headers.get(WORKSPACE_HEADER)
     if not header:
         raise AppError(status.HTTP_400_BAD_REQUEST, f"{WORKSPACE_HEADER} header required")

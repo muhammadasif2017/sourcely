@@ -33,8 +33,9 @@ The log is updated at the end of every task.
 18. [Step 17 (Task 12): Postgres foundation](#step-17-task-12-postgres-foundation)
 19. [Step 18 (Task 13): Accounts and sessions](#step-18-task-13-accounts-and-sessions)
 20. [Step 19 (Task 14): Workspaces, roles and the Principal](#step-19-task-14-workspaces-roles-and-the-principal)
-21. [How to run everything built so far](#how-to-run-everything-built-so-far)
-22. [Glossary](#glossary)
+21. [Step 20 (Task 15): API keys](#step-20-task-15-api-keys)
+22. [How to run everything built so far](#how-to-run-everything-built-so-far)
+23. [Glossary](#glossary)
 
 ---
 
@@ -1034,6 +1035,53 @@ Both answer **401** without a session, **404** "Workspace not found" for a works
 - A **probe route** is added to the app inside one test file only (`/_principal`), which returns the resolved Principal. That tests the dependency on its own, before any real route uses it.
 
 44 new tests: 18 for the role table and 26 for the API (creation, validation, CSRF, rename per role, 404 for strangers and malformed ids, delete with confirmation and its cascade, transfer and its edge cases, the one-owner index, and the Principal's 401, 400 and 404 cases).
+
+---
+
+## Step 20 (Task 15): API keys
+
+People sign in with sessions; programs use **API keys**. A key belongs to one workspace and acts in it with the editor role: it can read, search, ask and add documents, but it can't manage anything.
+
+### 20.1 The key and what's stored
+
+A key looks like `sk_live_` plus 43 URL-safe characters (32 random bytes). Only two things are stored (migration `0004`):
+
+- the **SHA-256 of the whole key**, used to look the key up;
+- the **first 12 characters** (`sk_live_7Hq2`), shown in lists so people can tell keys apart. Only 4 of those characters are random, far too few to guess the rest.
+
+The full key is in the `201` response to `POST /workspaces/{id}/api-keys` and **nowhere else, ever**. That's the same pattern as GitHub or Stripe: if the key is lost, you revoke it and make a new one.
+
+### 20.2 Endpoints
+
+| Endpoint | Result |
+|---|---|
+| `POST /workspaces/{id}/api-keys` `{name}` | `201` with the full key, shown once |
+| `GET /workspaces/{id}/api-keys` | Keys without secrets, with `last_used_at` and `revoked_at` |
+| `DELETE /workspaces/{id}/api-keys/{key_id}` | `204`; the key stops working on its next request |
+
+All three are for admins and the owner, signed in.
+
+### 20.3 Two ways to be a Principal
+
+`get_principal` now checks the `Authorization` header first:
+
+- **`Bearer sk_live_...`**: look the key up by its hash. Unknown or revoked is **401**. The Principal is the key's workspace with role `editor`, `api_key_id` set and `user_id` empty. `X-Workspace-ID` is optional; if sent, it must name the key's workspace (**400** otherwise).
+- **Otherwise**: the session and `X-Workspace-ID`, as in Task 14.
+
+Three rules keep the two paths apart:
+
+- **Not both.** A request with a session cookie *and* a key is **400**. Otherwise it would be unclear whose permissions apply.
+- **Keys can't act as a person.** Anything that uses `SessionDep` (`/me`, creating or managing workspaces, managing keys) answers a key with **403**. A leaked key can't create more keys or add members.
+- **No CSRF for keys.** CSRF exists because browsers attach cookies automatically. A key is attached only by the program that holds it, so a forged cross-site request can't carry it.
+
+`last_used_at` is updated at most once a minute, so a busy integration doesn't write to the database on every request.
+
+### 20.4 Tests
+
+- `tests/unit/test_api_key_generation.py` (4): format, uniqueness over 1,000 keys, how much the prefix reveals, and the stored hash.
+- `tests/integration/test_api_keys.py` (21): the key shown once and only its hash stored, name validation, role and stranger checks, CSRF on creation, the key resolving to an editor Principal, the workspace header rule, 4 kinds of bad credential, revocation taking effect at once, another workspace's key (404), deleting a workspace killing its keys, cookie plus key (400), keys refused on 5 session-only endpoints, and the once-a-minute `last_used_at`.
+
+The suite now takes about a minute, because each signed-in test user costs two Argon2 hashes.
 
 ---
 

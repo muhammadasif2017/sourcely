@@ -146,7 +146,7 @@ Source of truth: `SPEC.md`, section "Phase 1". Every task keeps the Definition o
   - Verify: unit and API tests.
   - Files: `app/api/auth.py`, `app/services/workspaces.py`, `app/api/routes/workspaces.py`, `app/schemas/workspaces.py`, `migrations/versions/0003_*`, `tests/`
 
-- [ ] **Task 15: API keys** (S)
+- [x] **Task 15: API keys** (S)
   - Acceptance:
     - Table `api_keys`; create (key shown once), list and revoke under `/workspaces/{id}/api-keys`, admin only.
     - Bearer keys resolve to a `Principal` with the editor role; a revoked key gets 401 at once; keys get 403 on management endpoints; a cookie plus a key gets 400; `last_used_at` is updated at most once a minute.

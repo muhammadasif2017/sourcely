@@ -444,3 +444,19 @@ These answers describe the product plan in [`docs/product/`](product/README.md).
 **Q: Why return 404 instead of 403 for someone else's workspace?**
 
 > 403 means "it exists but you can't have it", which confirms the workspace exists. 404 reveals nothing. A malformed id is also 404 rather than 422, for the same reason and so every "not yours" case looks identical.
+
+---
+
+## 16. Phase 1: API keys (Task 15)
+
+**Q: How do you store API keys?**
+
+> Only the SHA-256 of the key and its first 12 characters. The full key appears once, in the create response, like GitHub or Stripe keys. SHA-256 is fine here, unlike for passwords, because the key is 32 random bytes and can't be guessed; the hash just makes a stolen database row useless.
+
+**Q: What can an API key do, and what can't it?**
+
+> It acts in its own workspace with the editor role: read, search, ask, add and delete documents. It can't do anything that needs a person: `/me`, managing workspaces, members or other keys all answer 403. So a leaked key can't be used to create more keys or add members. Revoking it takes effect on the next request.
+
+**Q: Why don't API key requests need a CSRF token?**
+
+> CSRF works because browsers attach cookies to a request automatically, even when another site triggers it. An API key is only sent by the program that holds it, in an `Authorization` header, so a forged cross-site request can't include it. A request with both a cookie and a key is rejected with 400, so it's never ambiguous which rules apply.
