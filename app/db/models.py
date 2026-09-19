@@ -191,3 +191,27 @@ class Chunk(Base):
     chunk_index: Mapped[int] = mapped_column(primary_key=True)
     text: Mapped[str]
     embedding: Mapped[list[float]] = mapped_column(Vector(EMBEDDING_DIM))
+
+
+class Invite(Base):
+    """A pending invitation to join a workspace. Only the token's SHA-256 is stored."""
+
+    __tablename__ = "invites"
+    __table_args__ = (
+        # Invites can't create owners: ownership only moves by transfer.
+        CheckConstraint("role IN ('admin', 'editor', 'viewer')", name="role"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
+    )
+    email: Mapped[str] = mapped_column(CITEXT)
+    role: Mapped[str] = mapped_column(String(16))
+    token_hash: Mapped[bytes] = mapped_column(LargeBinary, unique=True)
+    invited_by: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = _now_column()
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

@@ -111,3 +111,68 @@ def transfer_ownership(
     db.flush()
     new_owner.role = "owner"
     db.flush()
+
+
+class NotAllowed(WorkspaceError):
+    """The action breaks a role rule. `reason` is safe to show the caller."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
+def list_members(db: Session, workspace_id: uuid.UUID) -> list[tuple[User, str]]:
+    """Every member with their role: owner first, then by role, then by name."""
+    rows = db.execute(
+        select(User, Membership.role)
+        .join(Membership, Membership.user_id == User.id)
+        .where(Membership.workspace_id == workspace_id)
+    ).all()
+    return sorted(
+        ((user, role) for user, role in rows),
+        key=lambda item: (-rank(item[1]), item[0].name.lower(), str(item[0].id)),
+    )
+
+
+def change_role(
+    db: Session,
+    workspace_id: uuid.UUID,
+    actor_role: str,
+    target_user_id: uuid.UUID,
+    new_role: str,
+) -> Membership:
+    """Give a member a new role.
+
+    The actor may only change members ranked below them, and only to a role below their own.
+    The owner's role never changes here; ownership moves by transfer.
+    """
+    target = get_membership(db, workspace_id, target_user_id)
+    if target is None:
+        raise MemberNotFound
+    if target.role == "owner":
+        raise NotAllowed("The owner's role changes only by transferring ownership")
+    if rank(target.role) >= rank(actor_role):
+        raise NotAllowed("You can only change members with a lower role than yours")
+    if rank(new_role) >= rank(actor_role):
+        raise NotAllowed("You can only give roles lower than your own")
+    target.role = new_role
+    return target
+
+
+def remove_member(
+    db: Session,
+    workspace_id: uuid.UUID,
+    actor_user_id: uuid.UUID,
+    actor_role: str,
+    target_user_id: uuid.UUID,
+) -> None:
+    """Remove a member. Anyone except the owner may leave; admins remove lower roles."""
+    target = get_membership(db, workspace_id, target_user_id)
+    if target is None:
+        raise MemberNotFound
+    if target.role == "owner":
+        raise NotAllowed("The owner can't be removed; transfer ownership first")
+    leaving = target_user_id == actor_user_id
+    if not leaving and not (allowed(actor_role, "manage") and rank(target.role) < rank(actor_role)):
+        raise NotAllowed("You can only remove members with a lower role than yours")
+    db.delete(target)

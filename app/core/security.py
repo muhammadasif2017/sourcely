@@ -8,8 +8,14 @@ from pathlib import Path
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
 
-# argon2-cffi's defaults follow RFC 9106's recommended Argon2id parameters.
-_hasher = PasswordHasher()
+
+def production_password_hasher() -> PasswordHasher:
+    """Argon2id with argon2-cffi's defaults, which follow RFC 9106's recommended parameters."""
+    return PasswordHasher()
+
+
+# Module-level so every request reuses it. Tests swap in cheaper parameters (see conftest).
+_hasher = production_password_hasher()
 
 # Checked when an email has no account, so a failed sign-in takes about as long either way
 # and response time doesn't reveal which emails are registered.

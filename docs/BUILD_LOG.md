@@ -35,8 +35,9 @@ The log is updated at the end of every task.
 20. [Step 19 (Task 14): Workspaces, roles and the Principal](#step-19-task-14-workspaces-roles-and-the-principal)
 21. [Step 20 (Task 15): API keys](#step-20-task-15-api-keys)
 22. [Step 21 (Task 16): Tenant data on pgvector](#step-21-task-16-tenant-data-on-pgvector)
-23. [How to run everything built so far](#how-to-run-everything-built-so-far)
-24. [Glossary](#glossary)
+23. [Step 22 (Task 17): Members and invites](#step-22-task-17-members-and-invites)
+24. [How to run everything built so far](#how-to-run-everything-built-so-far)
+25. [Glossary](#glossary)
 
 ---
 
@@ -1146,6 +1147,43 @@ Every PoC route kept its path and body, and gained two dependencies: `PrincipalD
 Then `uv remove chromadb` took chromadb and its dependencies out, along with `CHROMA_PATH`, `COLLECTION_NAME` and the Chroma volume in Compose. The rebuilt stack started, `migrate` applied everything through `0005`, and `/documents` without a credential returned 401.
 
 All 368 tests pass.
+
+---
+
+## Step 22 (Task 17): Members and invites
+
+People can now join a workspace without anyone touching the database: an admin invites them by email, and they accept with the link.
+
+### 22.1 Members
+
+| Endpoint | Rule |
+|---|---|
+| `GET /workspaces/{id}/members` | Admins and the owner. Owner first, then by role, then by name. |
+| `PATCH /workspaces/{id}/members/{user_id}` `{role}` | Only for members ranked **below** you, and only to a role **below** yours. `owner` isn't a choice (422): ownership moves by transfer. |
+| `DELETE /workspaces/{id}/members/{user_id}` | Admins remove lower-ranked members. **Anyone except the owner can remove themself**, which is how you leave a workspace. |
+
+"Below your own role" stops the usual escalation paths: an admin can't make someone else an admin (a second admin could then remove the first), can't demote another admin, and can't touch the owner. Each refusal is 403 with a reason.
+
+A removed member's next request to the workspace is 404, and it disappears from their `/me`: every request checks membership afresh, so there's no cached permission to invalidate.
+
+### 22.2 Invites (migration `0006`)
+
+An invite is a row with the workspace, the email, the role, a **hashed** single-use token and a 7-day expiry. The role column has a check constraint that rules out `owner`.
+
+- `POST /workspaces/{id}/invites` `{emails: [...], role}`: 1 to 20 emails, lowercased and deduplicated, each sent a link. The role must be below the inviter's. An email that already belongs to a member is 409. A new invite to the same address **replaces** the pending one, so an older link stops working.
+- `GET` lists pending invites (not accepted, not expired); `DELETE` revokes one by deleting it.
+- `POST /invites/accept` `{token}` needs a signed-in user whose email **matches** the invite's (409 otherwise), and returns the workspace and role. A missing, used, revoked or expired invite is **410 Gone**, the status for "this existed but is permanently unavailable". If the user is already a member, their current role is kept, so an invite can never *lower* anyone's role.
+
+Someone without an account signs up with the invited address, verifies, then accepts. A test walks exactly that path.
+
+### 22.3 Faster tests without weakening the code
+
+The suite was heading past 2 minutes: every signed-in test user costs Argon2 hashes, which are slow on purpose. A session-wide fixture now gives tests a cheap hasher (`time_cost=1`, 1 MiB of memory). Production is untouched: `production_password_hasher()` builds the real one, and a unit test asserts it still uses RFC 9106's parameters, so the shortcut can't leak into the app. The per-test table reset also reuses one connection pool and one prepared `TRUNCATE`. Result: 412 tests in about 1.5 minutes.
+
+### 22.4 Tests
+
+- `tests/integration/test_members.py` (24): the sorted list, who can list, allowed and refused role changes (a table of five refusals), removal and its immediate effect, four refused removals, leaving for each non-owner role, and CSRF.
+- `tests/integration/test_invites.py` (19): the email content, deduplication, replacing a pending invite, five validation cases, 409 for members, who can invite which roles, only the hash stored, accepting (single use), sign up then accept, the wrong email (409), expired, revoked and unknown tokens (410), session and CSRF, and another workspace's invite (404).
 
 ---
 

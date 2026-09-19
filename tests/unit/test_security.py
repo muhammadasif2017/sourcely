@@ -1,12 +1,14 @@
 """Password hashing, token generation and the common-password check."""
 
 import pytest
+from argon2.profiles import RFC_9106_LOW_MEMORY
 
 from app.core.security import (
     hash_password,
     hash_token,
     is_common_password,
     new_token,
+    production_password_hasher,
     verify_password,
 )
 
@@ -49,3 +51,11 @@ def test_common_passwords_are_detected_case_insensitively(password):
 
 def test_uncommon_password_passes():
     assert not is_common_password("violet-anchor-tuesday-42")
+
+
+def test_production_hasher_uses_rfc_9106_parameters():
+    # Tests run with cheap parameters (conftest); production must keep RFC 9106's.
+    hasher = production_password_hasher()
+    assert hasher.time_cost == RFC_9106_LOW_MEMORY.time_cost
+    assert hasher.memory_cost == RFC_9106_LOW_MEMORY.memory_cost
+    assert hasher.hash("x").startswith("$argon2id$")

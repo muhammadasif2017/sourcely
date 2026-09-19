@@ -168,7 +168,7 @@ Source of truth: `SPEC.md`, section "Phase 1". Every task keeps the Definition o
 - [x] Two workspaces can't see each other's data, proven at the HTTP and database levels. Approved by the owner on 2026-09-19.
 - [x] The parity gate passed, or the new threshold is recorded. (Passed: identical scores.)
 
-- [ ] **Task 17: Members and invites** (S)
+- [x] **Task 17: Members and invites** (S)
   - Acceptance:
     - List, change and remove members; admins only assign roles below their own; the owner can't be removed or demoted.
     - Create (1 to 20 emails), list and revoke invites; `POST /invites/accept` with 410 for missing, used or expired, and 409 for a different email; removing a member makes their next request 404.

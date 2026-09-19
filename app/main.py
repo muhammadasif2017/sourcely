@@ -12,7 +12,16 @@ from fastapi import FastAPI
 from sqlalchemy import Engine
 
 from app.api.middleware import RequestContextMiddleware, RequestSizeLimitMiddleware
-from app.api.routes import api_keys, ask, auth, documents, health, search, workspaces
+from app.api.routes import (
+    api_keys,
+    ask,
+    auth,
+    documents,
+    health,
+    members,
+    search,
+    workspaces,
+)
 from app.core.config import Settings, get_settings
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
@@ -76,6 +85,7 @@ def create_app(
     app.include_router(auth.router)
     app.include_router(workspaces.router)
     app.include_router(api_keys.router)
+    app.include_router(members.router)
     app.include_router(documents.router)
     app.include_router(search.router)
     app.include_router(ask.router)

@@ -483,3 +483,18 @@ These answers describe the product plan in [`docs/product/`](product/README.md).
 **Q: What's the catch with filtered vector search?**
 
 > An approximate index like HNSW gathers a fixed set of candidates and then applies the filter, so a strict filter can return fewer than `top_k` results even when matching rows exist. pgvector 0.8 has iterative index scans, which keep searching until enough rows pass the filter. I have a test with 60 close non-matching chunks and 5 matching ones that still gets 4 results.
+---
+
+## 18. Phase 1: members and invites (Task 17)
+
+**Q: How do you stop an admin from escalating privileges?**
+
+> One rule: you can only act on members ranked below you, and only grant roles below your own. So an admin can't create another admin (who could then remove them), can't demote a fellow admin, and can't touch the owner. The owner's role never changes through the role endpoint at all; ownership only moves by an explicit transfer. Invites follow the same rule, and the invites table has a check constraint so an `owner` invite can't even be stored.
+
+**Q: How do invites work, and what can go wrong?**
+
+> An invite stores the email, role, a hashed single-use token and a 7-day expiry, and the link goes by email. Accepting needs a signed-in user with the same email, otherwise 409, so a forwarded link can't be used by someone else. Used, revoked or expired links give 410 Gone. Re-inviting replaces the pending invite so only the newest link works, and accepting when already a member keeps the current role, so an old invite can't downgrade someone.
+
+**Q: Your tests use weaker password hashing. Isn't that risky?**
+
+> Only if it leaked into production, so that's what I guarded. The cheap parameters are swapped in by a test fixture. Production builds its hasher through one function, and a unit test asserts that function still uses RFC 9106's parameters. The algorithm and every code path are the same; only the cost changes. It took the suite from over two minutes to about one and a half.

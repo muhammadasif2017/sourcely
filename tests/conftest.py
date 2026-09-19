@@ -10,7 +10,7 @@ from alembic import command
 from alembic.config import Config
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import Connection, create_engine, make_url, text
+from sqlalchemy import Connection, Engine, create_engine, make_url, text
 from sqlalchemy.exc import OperationalError
 
 from app.core.config import Settings
@@ -161,24 +161,32 @@ def database_urls() -> Iterator[dict[str, str]]:
         admin.dispose()
 
 
-@pytest.fixture
-def clean_database(database_urls) -> dict[str, str]:
-    """Empty every table (except Alembic's) so each test starts from the same state."""
-    owner = create_engine(database_urls["owner"])
-    with owner.begin() as connection:
-        tables = (
-            connection.execute(
-                text(
-                    "SELECT tablename FROM pg_tables "
-                    "WHERE schemaname = 'public' AND tablename <> 'alembic_version'"
-                )
+@pytest.fixture(scope="session")
+def _owner_engine(database_urls) -> Iterator[Engine]:
+    """One owner connection pool for the whole run, used to reset tables between tests."""
+    engine = create_engine(database_urls["owner"])
+    yield engine
+    engine.dispose()
+
+
+@pytest.fixture(scope="session")
+def _truncate_sql(_owner_engine) -> str:
+    """One TRUNCATE for every table except Alembic's; the schema doesn't change during a run."""
+    with _owner_engine.connect() as connection:
+        tables = connection.execute(
+            text(
+                "SELECT tablename FROM pg_tables "
+                "WHERE schemaname = 'public' AND tablename <> 'alembic_version'"
             )
-            .scalars()
-            .all()
-        )
-        if tables:
-            connection.execute(text(f"TRUNCATE {', '.join(tables)} CASCADE"))
-    owner.dispose()
+        ).scalars()
+        return f"TRUNCATE {', '.join(tables)} CASCADE"
+
+
+@pytest.fixture
+def clean_database(database_urls, _owner_engine, _truncate_sql) -> dict[str, str]:
+    """Empty every table so each test starts from the same state."""
+    with _owner_engine.begin() as connection:
+        connection.execute(text(_truncate_sql))
     return database_urls
 
 
@@ -349,3 +357,21 @@ def sign_in(app, outbox) -> Iterator[Callable[..., TestClient]]:
 def csrf(client: TestClient) -> dict[str, str]:
     """The CSRF header a browser session must send on every write."""
     return {"X-CSRF-Token": client.cookies["sourcely_csrf"]}
+
+
+@pytest.fixture(autouse=True, scope="session")
+def fast_password_hashing() -> Iterator[None]:
+    """Cheap Argon2 parameters for tests, where hashing strength doesn't matter.
+
+    Every signed-in test user costs two hashes, and production parameters (RFC 9106) make the
+    suite several times slower. The algorithm and code paths are unchanged, and the unit tests
+    for `app.core.security` check the production hasher separately.
+    """
+    from argon2 import PasswordHasher
+
+    from app.core import security
+
+    production = security._hasher
+    security._hasher = PasswordHasher(time_cost=1, memory_cost=1024, parallelism=1)
+    yield
+    security._hasher = production
