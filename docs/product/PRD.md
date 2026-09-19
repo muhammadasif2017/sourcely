@@ -80,7 +80,7 @@ Phase 0 finishes the PoC exactly as specced. The product work starts only after 
 | Phase | Theme | Features | Exit criterion |
 |---|---|---|---|
 | **0** | Finish the PoC | Tasks 4 to 11 in `tasks/todo.md`: search, ask, upload (`.txt`, `.md`), list, delete, filters, streaming, Docker, README | Every success criterion in `SPEC.md` has evidence. |
-| **1** | Multi-tenant foundation | F1 Accounts, F2 Workspaces and roles, F10 API keys, Postgres, tenant isolation | Two workspaces on one deployment can't see each other's data, proven by automated tests. |
+| **1** | Multi-tenant foundation (**done 2026-09-19**) | F1 Accounts, F2 Workspaces and roles, F10 API keys, Postgres, tenant isolation | Two workspaces on one deployment can't see each other's data, proven by automated tests. |
 | **2** | Web app MVP | F3 Library, F5 Ask, F7 Scoped questions, F8 Search, members and invites UI | A new user reaches a cited answer in under 5 minutes in a usability test. |
 | **3** | Rich ingestion and conversations | F4 PDF and DOCX with background processing, F6 Conversations and follow-ups, F9 Answer feedback | 90% of real PDFs from pilot users are processed without error. |
 | **4** | Team and admin | F11 Usage insights, F12 Quotas and rate limits, audit log | An admin can answer "is this used, and is it good?" from one screen. |

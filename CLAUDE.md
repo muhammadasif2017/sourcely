@@ -18,7 +18,8 @@ uv run pytest -q                                         # tests: need `docker c
 uv run ruff check . && uv run ruff format --check .      # lint and format
 uv run mypy                                              # strict type check of app/
 uv run pre-commit run --all-files                        # every hook, the same checks as CI
-docker compose up --build                                # the API in a container, on port 8000
+docker compose up --build                                # db + migrate + api on port 8000 (COOKIE_SECURE=false there)
+docker compose logs api | grep -A5 "email to="           # read verification and invite links (console email)
 ```
 
 **Always use `--factory`.** There is intentionally no module-level `app` in `app/main.py`, so importing it never reads `.env` or loads models. `uvicorn app.main:app` will fail.

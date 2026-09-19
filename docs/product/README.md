@@ -26,6 +26,8 @@ Every feature, endpoint and component carries one of three labels, so it is alwa
 | **Specced** | Designed in `SPEC.md` and scheduled in `tasks/todo.md`, not built yet. |
 | **Proposed** | New in these documents. Needs a decision and a `SPEC.md` amendment before any code. |
 
+**Update, 2026-09-19: Phase 1 is built** (tag `v0.1.0` is the PoC; Tasks 12 to 18 added accounts, sessions, workspaces, roles, members, invites, API keys, and documents on PostgreSQL with pgvector and row-level security). Features F1, F2 (API) and F10 are Built. The phase history below is kept as written.
+
 Verified against the code on 2026-09-18: **Built** is `GET /health`, `POST /documents`, chunking, local embeddings, the Chroma vector store (count and replace), request-id middleware, error handlers, settings, CI and pre-commit hooks.
 
 ## Diagrams

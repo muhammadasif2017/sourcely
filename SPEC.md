@@ -492,6 +492,17 @@ Workspace management endpoints take the workspace from the path, not from `X-Wor
 5. Passwords and every token are stored only as hashes. The sign-in throttle returns 429 after 5 failures.
 6. `docker compose up --build` starts `db`, runs `migrate`, and serves a healthy `api`. Data survives a restart.
 
+### Evidence (Task 18, 2026-09-19)
+
+| # | Criterion | Evidence |
+|---|---|---|
+| 1 | Tests, lint, types, CI | `uv run pytest -q`: 412 passed against Postgres. ruff and mypy strict clean. GitHub Actions with a `pgvector/pgvector:pg17` service container passed on `374818f`. |
+| 2 | Workspaces can't see each other's data | HTTP: `tests/integration/test_tenant_isolation.py` finds every route that depends on `get_principal` (7) and requires a case for each; workspace B lists, creates, uploads, deletes, searches, asks and streams, and sees and changes nothing of A's. Database: `tests/integration/test_vector_store.py` runs raw `SELECT`s as `sourcely_app` with another workspace set (0 rows), with none set (0 rows), tries a cross-workspace insert (refused by RLS), and checks the setting doesn't leak into the next transaction. Live: a second account searching for the first workspace's document got no results, and naming that workspace got 404. |
+| 3 | Live curl run | Against `docker compose up --build`: sign-up 202; token read from `docker compose logs api`; verify set both cookies; workspace created with the CSRF header; ingest and `/ask` over the session returned "Yes, part-time staff receive annual leave pro-rated to their contracted hours [1]." citing `leave`; an API key was created and `/ask` with it answered "Full-time employees get 21 days of paid annual leave per year [1]."; `/ask/stream` with the key sent `sources`, 2 `token`, `done`. Unauthenticated `/documents` 401, the key on `/me` 403, a session write without CSRF 403. |
+| 4 | pgvector parity | Identical scores to Chroma to three decimals on all 22 calibration questions; `MIN_RELEVANCE` 0.58 unchanged (Task 16). |
+| 5 | Only hashes stored; throttle | `test_only_hashes_are_stored` (sessions, passwords), `test_only_the_hash_is_stored` (API keys, invites), `test_login_throttled_after_five_failures` (429 even with the right password, `Retry-After`). |
+| 6 | Compose stack | `db` healthy, `migrate` exited 0, `api` healthy; after `docker compose restart api` the chunk count was unchanged and the API key still searched. |
+
 ## Out of scope for Phase 1
 
 The web interface (Phase 2), a real email sender, Google sign-in, PDF and DOCX, conversations, feedback, usage insights, quotas, and an audit log. The PoC's Chroma data is not migrated.

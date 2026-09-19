@@ -38,12 +38,15 @@ services:
       - "8000:8000"
     env_file:
       - path: .env
-        # The API still starts without .env: /documents and /search work, /ask returns 503.
+        # The API still starts without .env; only /ask and /ask/stream need an LLM key.
         required: false
     environment:
       # Inside the container these are fixed by Compose, whatever a local .env says.
       DATABASE_URL: postgresql+psycopg://sourcely_app:sourcely_app@db:5432/sourcely
       EMBEDDING_CACHE_DIR: /app/data/models
+      # This stack serves plain HTTP on localhost, where Secure cookies aren't sent. Behind a
+      # TLS proxy in any real deployment, set this to "true" (the application default).
+      COOKIE_SECURE: "false"
     volumes:
       - model-cache:/app/data/models
     depends_on:

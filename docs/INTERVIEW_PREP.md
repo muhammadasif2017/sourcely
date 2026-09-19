@@ -498,3 +498,14 @@ These answers describe the product plan in [`docs/product/`](product/README.md).
 **Q: Your tests use weaker password hashing. Isn't that risky?**
 
 > Only if it leaked into production, so that's what I guarded. The cheap parameters are swapped in by a test fixture. Production builds its hasher through one function, and a unit test asserts that function still uses RFC 9106's parameters. The algorithm and every code path are the same; only the cost changes. It took the suite from over two minutes to about one and a half.
+---
+
+## 19. Phase 1 as a whole
+
+**Q: Walk me through what Phase 1 added and how you know it works.**
+
+> Accounts with verified email, server-side sessions with CSRF, workspaces with four roles, invites, and API keys; then documents moved from Chroma to Postgres with pgvector, with row-level security so each workspace only sees its own rows. I know it works because every success criterion in the spec has evidence: 412 tests against a real Postgres in CI, tests generated from the route table that try to reach one workspace's data from another, raw SQL checks of the security policy, a calibration run showing identical relevance scores after the database switch, and a live curl run on the Docker stack from sign-up to a cited answer.
+
+**Q: What would you do next?**
+
+> A real email sender, rate limits and quotas, and then the web app, which is Phase 2. PDF and DOCX need background processing, which is Phase 3. For operations: move the development database credentials into secrets, and put TLS in front, which also means turning `COOKIE_SECURE` back on.

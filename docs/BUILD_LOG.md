@@ -36,8 +36,9 @@ The log is updated at the end of every task.
 21. [Step 20 (Task 15): API keys](#step-20-task-15-api-keys)
 22. [Step 21 (Task 16): Tenant data on pgvector](#step-21-task-16-tenant-data-on-pgvector)
 23. [Step 22 (Task 17): Members and invites](#step-22-task-17-members-and-invites)
-24. [How to run everything built so far](#how-to-run-everything-built-so-far)
-25. [Glossary](#glossary)
+24. [Step 23 (Task 18): Compose, docs and the live run](#step-23-task-18-compose-docs-and-the-live-run)
+25. [How to run everything built so far](#how-to-run-everything-built-so-far)
+26. [Glossary](#glossary)
 
 ---
 
@@ -1187,6 +1188,37 @@ The suite was heading past 2 minutes: every signed-in test user costs Argon2 has
 
 ---
 
+## Step 23 (Task 18): Compose, docs and the live run
+
+The last Phase 1 task checks the whole thing the way a user would, and rewrites the documentation to match.
+
+### 23.1 The live run
+
+On the full Compose stack (`db`, `migrate`, `api`), with curl and a cookie jar:
+
+1. Sign up: 202. The verification email, token included, was in `docker compose logs api`.
+2. Verify: both cookies set, signed in.
+3. Create a workspace, sending the CSRF token from the cookie in `X-CSRF-Token`.
+4. Add a document and ask over the session: "Yes, part-time staff receive annual leave pro-rated to their contracted hours [1]."
+5. Create an API key, then ask with only the key: "Full-time employees get 21 days of paid annual leave per year [1]."
+6. Stream with the key: `sources`, two `token` events, `done`.
+7. The negative checks: no credential 401, the key on `/me` 403, a session write without CSRF 403.
+8. Restart the API: the chunk count was unchanged and the key still searched.
+9. A second account made its own workspace: searching for the first workspace's document found nothing, and naming the first workspace in the header got 404.
+
+**One configuration change came out of it.** The session cookie is `Secure` by default, so browsers and curl only send it over HTTPS. The Compose stack serves plain HTTP on localhost, so it now sets `COOKIE_SECURE=false` for the API, with a comment to turn it back on behind TLS. The application default stays `true`.
+
+### 23.2 Documentation
+
+- **README**, rewritten: both quick starts (the uv one now starts the database and runs migrations), a "first answer" walkthrough with curl, authentication (keys versus sessions, roles, CSRF), a full API reference in three groups, the error statuses, all configuration, the three isolation layers, and updated limits.
+- `SPEC.md` now records evidence for all six Phase 1 success criteria.
+- The product docs mark Phase 1 as built.
+- `CLAUDE.md` and `.env.example` have the Compose and cookie notes.
+
+Phase 1 ended with 412 tests, six migrations, and every success criterion backed by a test, a live run, or both.
+
+---
+
 ## How to run everything built so far
 
 ```bash
@@ -1201,7 +1233,7 @@ uv run ruff check . && uv run ruff format --check .        # lint and format
 uv run mypy                                                # types
 ```
 
-`--reload` restarts the server when you save a file. Use it in development only.
+`--reload` restarts the server when you save a file. Use it in development only. For local HTTP, put `COOKIE_SECURE=false` in `.env` so the session cookie comes back. The README's "Your first answer" walks through signing up and asking with curl.
 
 Or, with Docker only (no local Python needed):
 

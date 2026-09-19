@@ -175,7 +175,7 @@ Source of truth: `SPEC.md`, section "Phase 1". Every task keeps the Definition o
   - Verify: API tests.
   - Files: `app/services/workspaces.py`, `app/api/routes/members.py`, `app/api/routes/invites.py`, `migrations/versions/0006_*`, `tests/`
 
-- [ ] **Task 18: Compose, docs and live verification** (S)
+- [x] **Task 18: Compose, docs and live verification** (S)
   - Acceptance:
     - `docker compose up --build` starts `db`, runs the one-shot `migrate` service, then a healthy `api`; data survives a restart.
     - README, `CLAUDE.md`, `.env.example`, `BUILD_LOG.md`, `TECH_STACK.md` and `INTERVIEW_PREP.md` cover accounts, workspaces, keys and Postgres. The product docs mark Phase 1 as built.

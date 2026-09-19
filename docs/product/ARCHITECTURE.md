@@ -352,12 +352,12 @@ The PoC paths stay exactly as the client's brief fixed them. New endpoints are *
 | `POST /search` | Semantic search, with filters | Viewer | **Built** |
 | `POST /ask` | Answer with sources, with filters | Viewer | **Built** (`conversation_id` Proposed) |
 | `POST /ask/stream` | Streamed answer, SSE | Viewer | **Built** (`conversation_id` and `search_query` in the `sources` event Proposed) |
-| `POST /auth/signup`, `/auth/verify`, `/auth/login`, `/auth/logout`, `/auth/password-reset`, `/auth/password-reset/confirm` | Accounts and sessions | none or session | **Proposed** |
-| `GET /me` | Current user and their workspaces | session | **Proposed** |
-| `POST /workspaces`, `PATCH /workspaces/{id}`, `DELETE /workspaces/{id}` | Workspace lifecycle | session, Owner or Admin | **Proposed** |
-| `GET/POST /workspaces/{id}/members`, `PATCH/DELETE /workspaces/{id}/members/{user_id}` | Members and roles | Admin | **Proposed** |
-| `POST /workspaces/{id}/invites`, `DELETE /workspaces/{id}/invites/{invite_id}`, `POST /invites/accept` | Invites | Admin, then invitee | **Proposed** |
-| `GET/POST /api-keys`, `DELETE /api-keys/{id}` | API keys | Admin, session only | **Proposed** |
+| `POST /auth/signup`, `/auth/verify`, `/auth/login`, `/auth/logout`, `/auth/password-reset`, `/auth/password-reset/confirm` | Accounts and sessions | none or session | **Built** (Phase 1) |
+| `GET /me` | Current user and their workspaces | session | **Built** (Phase 1) |
+| `POST /workspaces`, `PATCH /workspaces/{id}`, `DELETE /workspaces/{id}`, `POST /workspaces/{id}/transfer` | Workspace lifecycle | session, Owner or Admin | **Built** (Phase 1) |
+| `GET /workspaces/{id}/members`, `PATCH/DELETE /workspaces/{id}/members/{user_id}` | Members and roles | Admin (or yourself, to leave) | **Built** (Phase 1) |
+| `POST/GET /workspaces/{id}/invites`, `DELETE /workspaces/{id}/invites/{invite_id}`, `POST /invites/accept` | Invites | Admin, then invitee | **Built** (Phase 1) |
+| `POST/GET /workspaces/{id}/api-keys`, `DELETE /workspaces/{id}/api-keys/{key_id}` | API keys (built under the workspace path) | Admin, session only | **Built** (Phase 1) |
 | `GET /conversations`, `GET/PATCH/DELETE /conversations/{id}` | Conversations | owner of the conversation | **Proposed** |
 | `PUT /messages/{id}/feedback`, `DELETE /messages/{id}/feedback` | Feedback | Viewer | **Proposed** |
 | `GET /usage?period=30d` | Usage insights | Admin | **Proposed** |

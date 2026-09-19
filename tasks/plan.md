@@ -105,7 +105,7 @@ Approved 2026-09-19 with decisions D1 (own auth), D2 (PostgreSQL) and D3 (pgvect
 - [x] Isolation proven at the HTTP and database levels; parity gate passed. Approved 2026-09-19.
 
 - [x] Task 17: Members and invites
-- [ ] Task 18: Compose, docs and live verification
+- [x] Task 18: Compose, docs and live verification
 
 ### Checkpoint F: Phase 1 complete
 - [ ] Every Phase 1 success criterion in `SPEC.md` has evidence.
